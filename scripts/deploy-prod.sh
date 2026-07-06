@@ -98,6 +98,10 @@ npx prisma generate
 OWNER_DB="postgresql://vaptbooster:$(grep '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)@127.0.0.1:5432/vaptbooster"
 MASTER_KEY="$(grep '^LITELLM_MASTER_KEY=' .env | cut -d= -f2-)"
 
+# ---- 5b. Baseline agent skills (idempotent — skills are DB content) ---------
+say "Seeding baseline agent skills"
+DATABASE_URL="$OWNER_DB" npx tsx scripts/seed-skills.ts || echo "  (skill seed skipped — non-fatal)"
+
 # ---- 6. Operator ------------------------------------------------------------
 if [ -n "${OPERATOR_EMAIL:-}" ] && [ -n "${OPERATOR_PASSWORD:-}" ]; then
   say "Creating/updating operator: ${OPERATOR_EMAIL}"
