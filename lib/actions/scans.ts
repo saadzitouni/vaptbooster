@@ -29,6 +29,12 @@ export async function requestScan(formData: FormData) {
   }
   const { targetId, notes } = parsed.data;
 
+  // AUTO_APPROVE_SCANS=true → skip the operator approval step: the scan is
+  // queued immediately when the tenant requests it. Scope must still be verified
+  // (that's the authorization gate). Leave unset to keep operator approval.
+  const autoApprove = process.env.AUTO_APPROVE_SCANS === "true";
+  let newScanId = "";
+
   await withTenant(tenantId, async (db) => {
     const target = await db.scopeTarget.findFirst({ where: { id: targetId } });
     if (!target) throw new Error("Target not found in your scope.");
@@ -37,17 +43,34 @@ export async function requestScan(formData: FormData) {
         "This target is not verified. Verify ownership under Scope before scanning it."
       );
     }
-    await db.scan.create({
+    const scan = await db.scan.create({
       data: {
         tenantId,
         targetId: target.id,
         targetValue: target.value,
-        status: "pending_approval",
+        status: autoApprove ? "queued" : "pending_approval",
         requesterId: userId,
+        approverId: autoApprove ? userId : null,
+        approvedAt: autoApprove ? new Date() : null,
         notes: notes || null,
       },
     });
+    newScanId = scan.id;
   });
+
+  // Enqueue immediately when auto-approving; revert to pending on enqueue failure.
+  if (autoApprove && newScanId) {
+    try {
+      await enqueueScan(newScanId, tenantId);
+    } catch {
+      await withTenant(tenantId, (db) =>
+        db.scan.update({
+          where: { id: newScanId },
+          data: { status: "pending_approval", approverId: null, approvedAt: null },
+        })
+      );
+    }
+  }
 
   revalidatePath("/scans");
   revalidatePath("/dashboard");
