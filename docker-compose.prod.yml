@@ -107,8 +107,10 @@ services:
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_TRUST_HOST: "true"
-      NEXTAUTH_URL: https://${ROOT_DOMAIN:?ROOT_DOMAIN is required}
-      APP_URL: https://${ROOT_DOMAIN}
+      # Override in .env when serving over plain HTTP (e.g. NEXTAUTH_URL=http://<ip>:8080)
+      # so NextAuth uses the right base URL + non-secure cookies (login works over http).
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://${ROOT_DOMAIN:?ROOT_DOMAIN is required}}
+      APP_URL: ${APP_URL:-https://${ROOT_DOMAIN}}
       ROOT_DOMAIN: ${ROOT_DOMAIN}
       SENTRY_DSN: ${SENTRY_DSN:-}
     healthcheck:
@@ -150,9 +152,9 @@ services:
     depends_on:
       web: { condition: service_healthy }
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      # HTTP-only on 8080 (avoids the host's port-80 conflict). No TLS — see
+      # the Caddyfile note; use 80/443 for production HTTPS.
+      - "8080:8080"
     environment:
       ROOT_DOMAIN: ${ROOT_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:-admin@${ROOT_DOMAIN}}

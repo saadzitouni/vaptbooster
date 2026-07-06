@@ -1,29 +1,20 @@
 # =============================================================
-# VAPTBOOSTER reverse proxy.
-# Terminates TLS and routes the apex + every tenant subdomain
-# (acme.vaptbooster.pwntrol.com, etc.) to the Next.js app.
-# ROOT_DOMAIN + ACME_EMAIL come from the environment.
+# VAPTBOOSTER reverse proxy — HTTP on :8080 (no TLS).
+#
+# ⚠ This serves plain HTTP. Automatic HTTPS is OFF because Let's Encrypt
+#   needs ports 80/443, which are unavailable on this host. For production
+#   client logins, run on 80/443 with TLS instead (free port 80, then restore
+#   the apex/*.ROOT_DOMAIN blocks with auto-HTTPS — see git history).
+#
+# The app routes tenants by Host header, so subdomains still work over :8080.
 # =============================================================
 
 {
-	email {$ACME_EMAIL}
-	# For local testing without public DNS, uncomment to use Caddy's internal CA:
-	# local_certs
+	# No ACME on a plain-HTTP port — don't attempt certificates.
+	auto_https off
 }
 
-# Apex — Caddy obtains a cert automatically via HTTP-01.
-{$ROOT_DOMAIN} {
+:8080 {
 	encode zstd gzip
 	reverse_proxy web:3000
-}
-
-# Tenant subdomains. A wildcard cert requires a DNS-01 challenge — add the
-# Caddy DNS module for your provider and credentials, then uncomment the tls
-# block. Until then this serves per-host certs on demand for known subdomains.
-*.{$ROOT_DOMAIN} {
-	encode zstd gzip
-	reverse_proxy web:3000
-	# tls {
-	#   dns <provider> {env.DNS_API_TOKEN}
-	# }
 }
