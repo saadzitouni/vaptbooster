@@ -98,9 +98,11 @@ $ docker compose -f docker-compose.prod.yml -f docker-compose.runner.yml up -d
 Localhost-only bindings — the firewall keeps them off the internet.
 
 ## 7. Install host deps (for the runner + admin scripts)
+Use `npm install`, not `npm ci` — the committed lockfile omits Linux-only
+optional deps, which `npm ci` (strict) rejects on a Linux host.
 ```
-$ npm ci && npx prisma generate          # root — for scripts/*
-$ ( cd worker && npm ci )                 # worker — for the runner
+$ npm install && npx prisma generate     # root — for scripts/*
+$ ( cd worker && npm install )            # worker — for the runner
 $ export OWNER_DB="postgresql://vaptbooster:<POSTGRES_PASSWORD>@127.0.0.1:5432/vaptbooster"
 ```
 
