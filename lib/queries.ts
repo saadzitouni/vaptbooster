@@ -323,6 +323,62 @@ export async function getOperatorTenants(): Promise<OperatorTenantView[]> {
   });
 }
 
+export type OperatorTargetView = {
+  id: string;
+  type: string;
+  value: string;
+  verifiedAt: string | null;
+  verifyMethod: string | null;
+  addedAt: string;
+  scanCount: number;
+};
+
+export async function getOperatorTenantDetail(tenantId: string) {
+  return withOperator(async (db) => {
+    const tenant = await db.tenant.findUnique({ where: { id: tenantId }, include: { budget: true } });
+    if (!tenant) return null;
+    const [targets, users, scans] = await Promise.all([
+      db.scopeTarget.findMany({
+        where: { tenantId },
+        orderBy: { addedAt: "desc" },
+        include: { _count: { select: { scans: true } } },
+      }),
+      db.user.findMany({ where: { tenantId }, orderBy: { createdAt: "asc" } }),
+      db.scan.findMany({ where: { tenantId }, orderBy: { requestedAt: "desc" }, take: 10 }),
+    ]);
+    return {
+      tenant: {
+        id: tenant.id,
+        slug: tenant.slug,
+        name: tenant.name,
+        industry: tenant.industry ?? "",
+        country: tenant.country ?? "",
+        plan: (tenant.budget?.plan ?? "solo") as string,
+        hasKey: !!tenant.litellmKeyId,
+        creditsUsed: tenant.budget?.creditsUsedThisPeriod ?? 0,
+        creditsIncluded: tenant.budget?.monthlyCreditsIncluded ?? 0,
+        spendUsdCents: tenant.budget?.spendThisPeriodUsdCents ?? 0,
+      },
+      targets: targets.map((t) => ({
+        id: t.id,
+        type: t.type as string,
+        value: t.value,
+        verifiedAt: t.verifiedAt ? t.verifiedAt.toISOString() : null,
+        verifyMethod: t.verifyMethod ?? null,
+        addedAt: t.addedAt.toISOString(),
+        scanCount: t._count.scans,
+      })) as OperatorTargetView[],
+      users: users.map((u) => ({ id: u.id, email: u.email, name: u.name ?? "", role: u.role as string })),
+      scans: scans.map((s) => ({
+        id: s.id,
+        targetValue: s.targetValue,
+        status: s.status as string,
+        requestedAt: s.requestedAt.toISOString(),
+      })),
+    };
+  });
+}
+
 export { ROOT_DOMAIN };
 
 // -------------------------------------------------------------

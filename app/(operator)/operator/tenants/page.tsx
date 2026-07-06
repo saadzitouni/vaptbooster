@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge, ScanStatusBadge } from "@/components/ui/Badge";
 import { requireOperator } from "@/lib/session";
 import { getOperatorTenants, ROOT_DOMAIN } from "@/lib/queries";
+import { NewTenantForm } from "@/components/operator/NewTenantForm";
 import { timeAgo } from "@/lib/utils";
 
 export default async function OperatorTenantsPage() {
@@ -25,12 +26,11 @@ export default async function OperatorTenantsPage() {
           </>
         }
         lede="Every workspace on the platform — provisioning, budgets, virtual keys, and lifecycle in one place."
-        actions={
-          <Button variant="solid" size="md">
-            + New tenant
-          </Button>
-        }
       />
+
+      <div className="mb-8">
+        <NewTenantForm />
+      </div>
 
       {/* KPI row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -128,12 +128,11 @@ export default async function OperatorTenantsPage() {
                     {/* Actions */}
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        <Button variant="line" size="sm">
-                          Provision key
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          Manage
-                        </Button>
+                        <Link href={`/operator/tenants/${t.id}`}>
+                          <Button variant="line" size="sm">
+                            Manage →
+                          </Button>
+                        </Link>
                       </div>
                     </td>
                   </tr>
