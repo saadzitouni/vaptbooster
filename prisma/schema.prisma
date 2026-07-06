@@ -1,0 +1,488 @@
+// =============================================================
+// VAPTBOOSTER — Prisma schema
+//
+// Every tenant-scoped table carries a tenantId column. RLS policies
+// (see migration 002_rls/migration.sql) enforce isolation at the
+// database level — even if the app forgets to filter.
+//
+// Run:
+//   npx prisma migrate dev
+//   npx prisma generate
+// =============================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev; the musl target is for the Alpine Docker images.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// Tenants — one client organization
+// -------------------------------------------------------------
+model Tenant {
+  id        String   @id @default(cuid())
+  slug      String   @unique // used in subdomain: acme.vaptbooster.pwntrol.com
+  name      String
+  industry  String?
+  country   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // LiteLLM virtual-key handle for this tenant (cost tracking)
+  litellmKeyId String? @unique
+
+  // Status / lifecycle
+  status    TenantStatus @default(active)
+
+  users         User[]
+  scopeTargets  ScopeTarget[]
+  scans         Scan[]
+  findings      Finding[]
+  reports       Report[]
+  usageRecords  UsageRecord[]
+  budget        TenantBudget?
+  invites       Invite[]
+
+  @@map("tenants")
+}
+
+enum TenantStatus {
+  active
+  suspended
+  archived
+}
+
+// -------------------------------------------------------------
+// Users — for v1, one user per tenant + operators (admins)
+// -------------------------------------------------------------
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  emailVerified DateTime?
+  name          String?
+  passwordHash  String?   // null if magic-link only
+  role          UserRole  @default(member)
+
+  // Tenant membership — null for operators (cross-tenant)
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastLogin DateTime?
+
+  // Audit trail — who initiated what
+  requestedScans  Scan[]    @relation("ScanRequester")
+  approvedScans   Scan[]    @relation("ScanApprover")
+
+  @@index([tenantId])
+  @@map("users")
+}
+
+enum UserRole {
+  operator       // PWNTROL staff: cross-tenant visibility, approves scans
+  admin          // Tenant org admin (v2 — when teams land)
+  member         // Tenant org regular user (v1 default)
+}
+
+// -------------------------------------------------------------
+// Invites — invite-only signup for tenants and operators
+// -------------------------------------------------------------
+model Invite {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique // long random, used in invite URL
+  role      UserRole
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy String?  // operator user id
+  expiresAt DateTime
+  acceptedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("invites")
+}
+
+// -------------------------------------------------------------
+// Scope targets — what a tenant is authorized to scan
+// -------------------------------------------------------------
+model ScopeTarget {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  type      ScopeType
+  value     String   // URL, domain, IP/CIDR, repo URL
+
+  // Proof of ownership
+  verifiedAt    DateTime?
+  verifyMethod  String?  // "dns-txt" | "file-upload" | "manual"
+
+  addedAt   DateTime @default(now())
+  scans     Scan[]
+
+  @@index([tenantId])
+  @@map("scope_targets")
+}
+
+enum ScopeType {
+  url
+  domain
+  ip
+  repo
+}
+
+// -------------------------------------------------------------
+// Scans — every audit, requested and run
+// -------------------------------------------------------------
+model Scan {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  targetId  String
+  target    ScopeTarget @relation(fields: [targetId], references: [id], onDelete: Restrict)
+  targetValue String   // denormalized for history (if scope target is later deleted)
+
+  status    ScanStatus @default(pending_approval)
+  notes     String?    @db.Text
+
+  // Audit
+  requesterId String?
+  requester   User?    @relation("ScanRequester", fields: [requesterId], references: [id], onDelete: SetNull)
+  approverId  String?
+  approver    User?    @relation("ScanApprover", fields: [approverId], references: [id], onDelete: SetNull)
+
+  requestedAt DateTime  @default(now())
+  approvedAt  DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  // Live state
+  progress      Int     @default(0) // 0..100
+  currentStep   String?
+  agentLog      Json?   // live transcript of the agent's steps + AI tool-calls
+
+  // Cost tracking — running totals per scan
+  spentUsdCents  Int     @default(0) // store cents to avoid float drift
+  ceilingUsdCents Int    @default(2500) // €25 default; overridable per tenant plan
+  creditsConsumed Int    @default(0)
+
+  // BullMQ job id (so we can cancel/inspect)
+  jobId     String?
+
+  findings     Finding[]
+  reports      Report[]
+  usageRecords UsageRecord[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([requestedAt])
+  @@map("scans")
+}
+
+enum ScanStatus {
+  draft
+  pending_approval
+  queued
+  running
+  reviewing      // findings being human-verified
+  completed
+  failed
+  cancelled
+  paused_ceiling // hit cost ceiling — needs operator intervention
+}
+
+// -------------------------------------------------------------
+// Findings — vulnerabilities discovered
+// -------------------------------------------------------------
+model Finding {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  scanId    String
+  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  title     String
+  summary   String   @db.Text
+  severity  Severity
+  status    FindingStatus @default(open)
+  cwe       String?
+  location  String
+
+  // Verification by senior operator
+  reproducedBy   String?
+  reproducedAt   DateTime?
+  evidenceUrl    String?  // S3 key
+
+  // Remediation
+  remediation    String?  @db.Text
+  fixedAt        DateTime?
+
+  discoveredAt   DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([scanId])
+  @@index([severity, status])
+  @@map("findings")
+}
+
+enum Severity {
+  critical
+  high
+  medium
+  low
+  info
+}
+
+enum FindingStatus {
+  open
+  triaged
+  fixed
+  wontfix
+  duplicate
+}
+
+// -------------------------------------------------------------
+// Reports — PDFs generated per scan
+// -------------------------------------------------------------
+model Report {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scanId    String
+  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  s3Key     String
+  format    String   @default("pdf")
+  generatedAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("reports")
+}
+
+// -------------------------------------------------------------
+// Usage records — every LLM call, for billing + observability
+// -------------------------------------------------------------
+model UsageRecord {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Optional scan link — usage may also come from non-scan ops (e.g. chat, report gen)
+  scanId    String?
+  scan      Scan?    @relation(fields: [scanId], references: [id], onDelete: SetNull)
+
+  // What kind of work it was — used for cost-attribution analytics
+  operation String   // "recon" | "fuzz" | "exploit" | "validate" | "report" | "chat"
+
+  // The model used + token counts
+  model          String
+  promptTokens   Int
+  completionTokens Int
+  cachedTokens   Int     @default(0)
+
+  // Cost — computed at write time from provider pricing (cents to avoid float)
+  costUsdCents   Int
+
+  // Provider response metadata
+  providerLatencyMs Int?
+  providerRequestId String?
+
+  occurredAt DateTime @default(now())
+
+  @@index([tenantId, occurredAt])
+  @@index([scanId])
+  @@index([operation])
+  @@map("usage_records")
+}
+
+// -------------------------------------------------------------
+// Tenant budget — credit/cost plan for the tenant
+// -------------------------------------------------------------
+model TenantBudget {
+  tenantId String   @id
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  plan     PlanTier @default(solo)
+
+  // Monthly allotment
+  monthlyCreditsIncluded Int @default(10)
+  monthlyHardCeilingUsdCents Int @default(50000) // €500 default — emergency stop
+
+  // Current period (resets monthly)
+  currentPeriodStart DateTime
+  creditsUsedThisPeriod Int @default(0)
+  spendThisPeriodUsdCents Int @default(0)
+
+  // Rollover (one month max)
+  creditsRolledOver Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("tenant_budgets")
+}
+
+enum PlanTier {
+  solo       // 10 credits/mo
+  team       // 50 credits/mo
+  enterprise // custom
+}
+
+// =============================================================
+// SKILL MANAGEMENT
+//
+// Skills are the agent's capabilities. Their *code* lives in
+// worker/src/skills/* (deployed via Git), but their *config*
+// (prompts, payload sets, thresholds, enabled flag) lives in the
+// DB so operators can tune without deploying.
+//
+// Every edit creates a new SkillVersion — Skill.currentVersionId
+// points at the live one. Rollback = re-point that field.
+// =============================================================
+
+model Skill {
+  id        String        @id @default(cuid())
+  key       String        @unique // stable id: "test_for_idor", "recon_target"
+  altitude  SkillAltitude
+  category  String        // "authorization" | "injection" | "recon" | ...
+  enabled   Boolean       @default(true)
+
+  // The version this skill currently runs from. Null = no published version.
+  currentVersionId String?       @unique
+  currentVersion   SkillVersion? @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+
+  versions  SkillVersion[] @relation("AllVersions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([altitude])
+  @@index([category])
+  @@map("skills")
+}
+
+enum SkillAltitude {
+  atomic     // deterministic primitives (fetch_url, enumerate_subdomains)
+  tactical   // vulnerability playbooks (test_for_idor, test_for_ssrf)
+  strategic  // orchestrators (recon_target, audit_authentication)
+}
+
+model SkillVersion {
+  id            String   @id @default(cuid())
+  skillId       String
+  skill         Skill    @relation("AllVersions", fields: [skillId], references: [id], onDelete: Cascade)
+
+  versionNumber Int
+
+  // -------- Editable surface area --------
+  name          String
+  description   String   @db.Text
+
+  // Markdown bullets — guidance for the strategic planner
+  triggers      String   @db.Text
+  antiTriggers  String   @db.Text
+
+  // Prompts injected into LLM calls inside this skill
+  systemPrompt  String   @db.Text
+  classifyPrompt String? @db.Text
+
+  // Structured payload data (SQLi payload list, SSRF target list, etc.)
+  payloadSets   Json     @default("{}")
+
+  // Severity & confidence rules
+  severityMap   Json     @default("{}")
+  confidenceThreshold Float @default(0.7)
+
+  // Model + cost
+  modelChoice       String @default("vaptbooster-default")
+  maxCostUsdCents   Int    @default(50)
+
+  // Safety guards (rate limits, write-mode, scope requirements)
+  safety        Json     @default("{}")
+
+  // -------- Audit --------
+  createdById   String?
+  createdAt     DateTime  @default(now())
+  publishedAt   DateTime?
+
+  // Back-reference for currentVersion (uniqueness enforced by Skill.currentVersionId @unique)
+  isCurrentFor  Skill?   @relation("CurrentVersion")
+
+  @@unique([skillId, versionNumber])
+  @@index([skillId])
+  @@map("skill_versions")
+}
+
+// =============================================================
+// AGENT CONFIG
+//
+// Singleton row keyed by id="global". Holds the knobs that
+// govern the strategic planner — not tied to any one skill.
+// =============================================================
+model AgentConfig {
+  id        String @id @default("global")
+
+  // Cost guardrails
+  defaultCeilingUsdCents Int @default(2500)   // €25 per scan default
+
+  // Execution
+  stepConcurrency        Int @default(1)
+  maxReconDepth          Int @default(3)
+  maxChainDepth          Int @default(4)
+
+  // Behavior
+  aggressivenessLevel    AggressivenessLevel @default(standard)
+  stopOnFirstCritical    Boolean @default(false)
+
+  // Default model choices (override per skill via SkillVersion.modelChoice)
+  defaultFastModel       String @default("vaptbooster-fast")
+  defaultStandardModel   String @default("vaptbooster-default")
+  defaultDeepModel       String @default("vaptbooster-deep")
+
+  // Strategic planner system prompt — lives here, not in a skill,
+  // because it governs which skills get picked, not how they run
+  plannerSystemPrompt    String @db.Text
+
+  updatedById            String?
+  updatedAt              DateTime @updatedAt
+
+  @@map("agent_config")
+}
+
+enum AggressivenessLevel {
+  conservative  // only run tactical skills with very high signal
+  standard
+  aggressive    // run any tactical skill that triggers, even speculatively
+}
+
+// =============================================================
+// AUDIT LOG — every change to skills and agent config
+// =============================================================
+model SkillAuditLog {
+  id        String   @id @default(cuid())
+
+  skillId   String?
+  versionId String?
+
+  action    String   // "created" | "edited" | "published" | "rolled_back" | "disabled" | "enabled"
+  actorId   String   // operator user id
+  diff      Json?    // JSON Patch (RFC 6902) of what changed
+  reason    String?  // optional commit message
+
+  createdAt DateTime @default(now())
+
+  @@index([skillId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("skill_audit_logs")
+}

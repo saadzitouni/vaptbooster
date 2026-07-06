@@ -1,0 +1,76 @@
+# =============================================================
+# LiteLLM proxy config for VAPTBOOSTER
+#
+# Models exposed to scan workers. All cost tracking and budget
+# enforcement happens here; the worker calls these model aliases
+# with a per-tenant virtual key.
+#
+# Pricing verified against current Anthropic list prices
+# (per-MTok → per-token): Opus 4.8 $5/$25, Sonnet 4.6 $3/$15,
+# Haiku 4.5 $1/$5. Cache: writes ~1.25× input (5-min TTL),
+# reads ~0.1× input. Keep this file in sync with provider pricing.
+# =============================================================
+
+model_list:
+  # ---- Default workhorse: balanced speed/quality (Sonnet 4.6) ----
+  - model_name: vaptbooster-default
+    litellm_params:
+      model: openrouter/anthropic/claude-sonnet-4.6
+      api_key: os.environ/OPENROUTER_API_KEY
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+      cache_creation_input_token_cost: 0.00000375
+      cache_read_input_token_cost: 0.0000003
+
+  # ---- Cheap model for cheap loops (param discovery, payload mutation) — Haiku 4.5 ----
+  - model_name: vaptbooster-fast
+    litellm_params:
+      model: openrouter/anthropic/claude-haiku-4.5
+      api_key: os.environ/OPENROUTER_API_KEY
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
+      cache_creation_input_token_cost: 0.00000125
+      cache_read_input_token_cost: 0.0000001
+
+  # ---- Heavyweight: deep reasoning for chained exploits + report writing (Opus 4.8) ----
+  - model_name: vaptbooster-deep
+    litellm_params:
+      model: openrouter/anthropic/claude-opus-4.8
+      api_key: os.environ/OPENROUTER_API_KEY
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+      cache_creation_input_token_cost: 0.00000625
+      cache_read_input_token_cost: 0.0000005
+
+# ---- Proxy-wide defaults ----
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+  # Persist spend/usage to the litellm DB
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: true
+
+  # Cache hits — saves ~10x on cost for repeated prompts (e.g. recon)
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: 6379
+    password: os.environ/REDIS_PASSWORD
+
+  # When a tenant's virtual-key budget is hit, return 429 immediately.
+  # The scan worker checks for 429 and pauses the scan.
+  block_on_budget_exceeded: true
+
+litellm_settings:
+  # Drop unsupported params silently rather than erroring
+  drop_params: true
+
+  # Retry transient failures (rate limits, server overload)
+  num_retries: 3
+  request_timeout: 600 # seconds — long enough for complex prompts
+
+  # Return the computed cost in the response so the worker can record it.
+  # (worker/src/llm.ts reads usage.response_cost)
+  # fallbacks:
+  #   - { "vaptbooster-default": ["vaptbooster-deep"] }

@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    background: #0a0a0a;
+    color: #ededed;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: #ededed; color: #0a0a0a; }
+
+  /* Subtle grain — barely perceptible, sells the brutecat texture */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #0a0a0a; }
+  ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 1px; }
+  ::-webkit-scrollbar-thumb:hover { background: #6a6a6a; }
+
+  /* Headings default to mono. We use the .serif class to swap in Fraunces italic for emphasis. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-weight: 500;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer utilities {
+  /* The signature brutecat emphasis — italic Fraunces with optical sizing */
+  .em {
+    font-family: "Fraunces", Georgia, serif;
+    font-style: italic;
+    font-weight: 500;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+  }
+  .em-sm {
+    font-family: "Fraunces", Georgia, serif;
+    font-style: italic;
+    font-weight: 500;
+    font-variation-settings: "opsz" 96, "SOFT" 50;
+  }
+
+  /* Pulsing live indicator */
+  .pulse-dot::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    border-radius: 9999px;
+    margin-right: 6px;
+    vertical-align: 1px;
+    box-shadow: 0 0 0 0 currentColor;
+    animation: pulse 1.6s ease-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+    70%  { box-shadow: 0 0 0 6px transparent; opacity: 0.8; }
+    100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+  }
+
+  /* Eyebrow label used above section titles */
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: #6a6a6a;
+    text-transform: uppercase;
+  }
+}

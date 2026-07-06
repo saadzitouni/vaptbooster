@@ -1,0 +1,156 @@
+# =============================================================
+# VAPTBOOSTER — PRODUCTION stack.
+#
+#   cp .env.production.example .env.production   # fill in real secrets
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Secrets are fail-closed (${VAR:?...}) — the stack refuses to start if a
+# required secret is unset. Only Caddy publishes host ports (80/443); every
+# other service is internal-only. The app connects as the low-privilege
+# vaptbooster_app role so Postgres RLS is enforced.
+# =============================================================
+
+services:
+  # ---- Postgres (internal) ----
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vaptbooster}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_MULTIPLE_DATABASES: vaptbooster,litellm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-multi-db.sh:/docker-entrypoint-initdb.d/init-multi-db.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-vaptbooster}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- Redis (internal) ----
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- LiteLLM gateway (internal) ----
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vaptbooster}:${POSTGRES_PASSWORD}@postgres:5432/litellm
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?ANTHROPIC_API_KEY is required}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      STORE_MODEL_IN_DB: "True"
+    volumes:
+      - ./infra/litellm/config.yaml:/app/config.yaml:ro
+    command: --config /app/config.yaml --port 4000 --num_workers 2
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---- One-shot DB bootstrap: migrations + low-priv role (+ optional seed) ----
+  db-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      # Owner connection — migrations + role creation need superuser.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vaptbooster}:${POSTGRES_PASSWORD}@postgres:5432/vaptbooster
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}
+      SEED_ON_INIT: ${SEED_ON_INIT:-false}
+
+  # ---- Next.js web (internal; exposed via Caddy) ----
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db-init: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      # Low-privilege app role → RLS enforced.
+      DATABASE_URL: postgresql://vaptbooster_app:${APP_DB_PASSWORD}@postgres:5432/vaptbooster
+      REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      AUTH_TRUST_HOST: "true"
+      NEXTAUTH_URL: https://${ROOT_DOMAIN:?ROOT_DOMAIN is required}
+      APP_URL: https://${ROOT_DOMAIN}
+      ROOT_DOMAIN: ${ROOT_DOMAIN}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---- Scan worker (internal) ----
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db-init: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      litellm: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      # Cross-tenant system service — owner connection (bypasses RLS by design).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vaptbooster}:${POSTGRES_PASSWORD}@postgres:5432/vaptbooster
+      REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      # Set to false once per-tenant virtual keys are provisioned + mounted.
+      SIMULATE_LLM: ${SIMULATE_LLM:-true}
+      LITELLM_KEYS_FILE: /secrets/litellm-keys.json
+    volumes:
+      - ./.secrets:/secrets:ro
+
+  # ---- Caddy reverse proxy (TLS + tenant subdomains) — the only public entry ----
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      web: { condition: service_healthy }
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ROOT_DOMAIN: ${ROOT_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@${ROOT_DOMAIN}}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,31 @@
+import { redirect } from "next/navigation";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Topbar } from "@/components/layout/Topbar";
+import { auth } from "@/auth";
+
+export default async function OperatorLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (session.user.role !== "operator") redirect("/dashboard");
+
+  const operator = {
+    name: session.user.name ?? session.user.email ?? "Operator",
+    email: session.user.email ?? "",
+  };
+
+  return (
+    <div className="flex min-h-screen">
+      <Sidebar variant="operator" />
+      <div className="flex-1 flex flex-col min-w-0">
+        <Topbar user={operator} />
+        <main className="flex-1 px-6 md:px-10 py-8 md:py-10 max-w-[1280px] w-full">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+.secrets
+*.tsbuildinfo
+npm-debug.log*
+Dockerfile
+.dockerignore
+README.md
+docker-compose.yml
+worker/node_modules

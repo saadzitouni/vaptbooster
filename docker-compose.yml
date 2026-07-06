@@ -1,0 +1,111 @@
+# =============================================================
+# VAPTBOOSTER infra — Postgres + Redis + LiteLLM proxy
+#
+# Spin up everything:
+#   docker compose up -d
+#
+# Tear down (keep data):
+#   docker compose down
+#
+# Tear down + wipe volumes:
+#   docker compose down -v
+#
+# After first up:
+#   1. Run Prisma migrations against postgres   (see README)
+#   2. Apply RLS migration manually as superuser
+#   3. Create LiteLLM master key (see scripts/init-litellm.sh)
+# =============================================================
+
+services:
+  # -----------------------------------------------------------
+  # Postgres — tenant data + LiteLLM internal state
+  # -----------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vaptbooster}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_MULTIPLE_DATABASES: vaptbooster,litellm
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-multi-db.sh:/docker-entrypoint-initdb.d/init-multi-db.sh:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER:-vaptbooster}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------------------
+  # Redis — BullMQ scan queue + LiteLLM cache
+  # -----------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # -----------------------------------------------------------
+  # LiteLLM proxy — gateway to all LLM providers
+  # All scan workers + the Next.js app talk to this, never to
+  # Anthropic/OpenAI/etc. directly. This is where:
+  #   - per-tenant virtual keys live
+  #   - per-tenant budgets are enforced
+  #   - every call is logged with metadata for cost attribution
+  # -----------------------------------------------------------
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Master key — used by your app to create virtual keys
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-master-changeme}
+
+      # Internal database for LiteLLM (virtual keys, spend tracking)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vaptbooster}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/litellm
+
+      # Cache hits and budget state live here — much faster than DB lookups
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+
+      # Provider keys — set these in .env
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+
+      # Enable spend logs (we'll query these per tenant)
+      STORE_MODEL_IN_DB: "True"
+      LITELLM_LOG: INFO
+
+      # Prometheus metrics for the operator dashboard
+      LITELLM_PROXY_BASE_URL: http://litellm:4000
+    volumes:
+      - ./infra/litellm/config.yaml:/app/config.yaml:ro
+    command: --config /app/config.yaml --port 4000 --num_workers 2
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  postgres_data:
+  redis_data:

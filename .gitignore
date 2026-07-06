@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+build
+.env
+.env.local
+.secrets
+*.log
+.DS_Store
+
+# build cache / stray temp scripts
+*.tsbuildinfo
+scripts/_*.ts

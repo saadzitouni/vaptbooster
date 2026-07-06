@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1
+# =============================================================
+# VAPTBOOSTER db-init (migrator) image — runs once on deploy to
+# apply migrations, create the low-privilege app role, and
+# optionally seed. Build context is the repo ROOT.
+# =============================================================
+
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+
+# psql / pg_isready for the role script + readiness wait; openssl for the
+# Prisma migration/query engines (required on Alpine/musl).
+RUN apk add --no-cache postgresql-client openssl
+
+# --include=dev so prisma CLI + tsx (devDeps) are baked in, not fetched via
+# npx at runtime (which would need network on every deploy).
+COPY package.json package-lock.json* ./
+RUN npm ci --include=dev || npm install --include=dev
+
+COPY prisma ./prisma
+COPY scripts ./scripts
+COPY lib ./lib
+RUN npx prisma generate
+
+RUN cp scripts/bootstrap-db.sh /usr/local/bin/bootstrap-db.sh && \
+    chmod +x /usr/local/bin/bootstrap-db.sh
+
+# DATABASE_URL here MUST be the owner/superuser connection (migrations +
+# role creation). APP_DB_PASSWORD is the password for the low-priv role.
+CMD ["/usr/local/bin/bootstrap-db.sh"]
