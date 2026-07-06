@@ -18,8 +18,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { lookup } from "dns/promises";
-import { readFileSync, existsSync, readdirSync } from "fs";
-import { resolve as pathResolve } from "path";
+import { readFileSync, existsSync } from "fs";
 import OpenAI from "openai";
 import { PrismaClient, ScanStatus, Severity, FindingStatus } from "@prisma/client";
 
@@ -28,7 +27,6 @@ const prisma = new PrismaClient();
 
 const IMAGE = process.env.SANDBOX_IMAGE ?? "vaptbooster-agent-sandbox:latest";
 const LITELLM_URL = process.env.LITELLM_BASE_URL ?? "http://localhost:4000";
-const SKILLS_DIR = pathResolve(process.cwd(), process.env.SKILLS_DIR ?? "../agent-sandbox/skills");
 
 const PRICING: Record<string, { in: number; out: number }> = {
   "vaptbooster-fast": { in: 0.000001, out: 0.000005 },
@@ -41,14 +39,25 @@ function arg(name: string, def?: string): string | undefined {
   return hit ? hit.split("=").slice(1).join("=") : def;
 }
 
-function loadSkills(): string {
-  if (!existsSync(SKILLS_DIR)) return "(no skills mounted)";
+// The bridge: the agent's methodology comes from the operator-editable skill
+// catalog in the DB (enabled strategic + tactical skills, current published
+// version). Edit a skill in /operator/skills → the next scan uses it. No deploy.
+async function loadSkillsFromDb(): Promise<string> {
+  const skills = await prisma.skill.findMany({
+    where: { enabled: true, altitude: { in: ["strategic", "tactical"] } },
+    include: { currentVersion: true },
+    orderBy: { altitude: "desc" }, // strategic (methodology) first
+  });
   const parts: string[] = [];
-  for (const dir of readdirSync(SKILLS_DIR)) {
-    const p = pathResolve(SKILLS_DIR, dir, "SKILL.md");
-    if (existsSync(p)) parts.push(readFileSync(p, "utf8"));
+  for (const s of skills) {
+    const v = s.currentVersion;
+    if (!v || !v.systemPrompt?.trim()) continue;
+    parts.push(
+      `## Skill: ${v.name} [${s.key}] — ${s.altitude} (v${v.versionNumber})\n` +
+        `${v.description}\n\nWhen to use: ${v.triggers}\n\n${v.systemPrompt}`
+    );
   }
-  return parts.join("\n\n---\n\n");
+  return parts.length ? parts.join("\n\n---\n\n") : "(no enabled skills in the catalog)";
 }
 
 function loadVirtualKey(tenantId: string): string | null {
@@ -239,6 +248,8 @@ async function main() {
 
   try {
     const client = new OpenAI({ apiKey: virtualKey, baseURL: LITELLM_URL, defaultHeaders: { "x-litellm-metadata": JSON.stringify({ tenant_id: tenant.id, scan_id: scan.id, operation: "autonomous" }) } });
+    const skillsText = await loadSkillsFromDb(); // operator-editable methodology from the DB
+    await log("system", "info", `loaded ${skillsText.split("## Skill:").length - 1} skill(s) from the catalog`);
     const system = `You are VAPTBOOSTER's autonomous penetration-testing agent. You operate a shell INSIDE an egress-locked sandbox that can reach ONLY the authorized target: ${targetUrl}. Tools available in the box: curl, python3 (with requests), jq, openssl, standard unix tools.
 
 Conduct a thorough, professional, AUTHORIZED penetration test of the target and report every confirmed vulnerability.
@@ -252,8 +263,8 @@ RULES:
 
 Use bash to run commands, report_finding for confirmed issues, finish to end.
 
-=== SKILLS (your playbooks) ===
-${loadSkills()}`;
+=== SKILLS (your playbooks — authored by the operator) ===
+${skillsText}`;
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: "system", content: system },

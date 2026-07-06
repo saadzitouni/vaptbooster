@@ -11,3 +11,4 @@ build
 # build cache / stray temp scripts
 *.tsbuildinfo
 scripts/_*.ts
+_*.ts
