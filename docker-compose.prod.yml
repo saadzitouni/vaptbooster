@@ -97,6 +97,11 @@ services:
       redis: { condition: service_healthy }
     environment:
       NODE_ENV: production
+      # Bind the standalone server to all interfaces. Docker auto-sets HOSTNAME
+      # to the container id, which Next would otherwise bind to — making the app
+      # unreachable on localhost (healthcheck gets "connection refused").
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
       # Low-privilege app role → RLS enforced.
       DATABASE_URL: postgresql://vaptbooster_app:${APP_DB_PASSWORD}@postgres:5432/vaptbooster
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
