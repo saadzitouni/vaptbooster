@@ -76,7 +76,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
   // Get the tenant's virtual key. In production this comes from a
   // secrets manager (Vault, AWS Secrets, Doppler) keyed by
   // tenant.litellmKeyId. For dev we read from env.
-  const virtualKey = SIMULATE ? "sim-key" : loadTenantVirtualKey(tenantId);
+  const virtualKey = SIMULATE ? "sim-key" : await loadTenantVirtualKey(tenantId);
   if (!virtualKey) {
     await failScan(
       scanId,
@@ -375,11 +375,19 @@ async function failScan(scanId: string, reason: string) {
   });
 }
 
-function loadTenantVirtualKey(tenantId: string): string | null {
-  // PRODUCTION: fetch from Vault / AWS Secrets keyed by tenant.
-  // DEV: read the raw key from the secrets bridge written by
-  // scripts/provision-tenant-key.ts (or LITELLM_TENANT_KEY override).
+async function loadTenantVirtualKey(tenantId: string): Promise<string | null> {
   if (process.env.LITELLM_TENANT_KEY) return process.env.LITELLM_TENANT_KEY;
+  // Preferred: the key provisioned via the operator UI, stored on the tenant.
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ litellmKey: string | null }[]>(
+      'SELECT "litellmKey" FROM tenants WHERE id = $1',
+      tenantId
+    );
+    if (rows[0]?.litellmKey) return rows[0].litellmKey;
+  } catch {
+    /* litellmKey column may be absent on an un-migrated DB — fall through */
+  }
+  // Fallback: the .secrets bridge file (scripts/provision-tenant-key.ts).
   const candidates = [
     process.env.LITELLM_KEYS_FILE,
     "../.secrets/litellm-keys.json",

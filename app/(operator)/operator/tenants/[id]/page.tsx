@@ -8,6 +8,7 @@ import type { ScanStatus } from "@/lib/mock-data";
 import { requireOperator } from "@/lib/session";
 import { getOperatorTenantDetail, ROOT_DOMAIN } from "@/lib/queries";
 import { OperatorScopePanel } from "@/components/operator/OperatorScopePanel";
+import { ProvisionKeyButton } from "@/components/operator/ProvisionKeyButton";
 import { timeAgo } from "@/lib/utils";
 
 export default async function OperatorTenantDetailPage({
@@ -58,10 +59,11 @@ export default async function OperatorTenantDetailPage({
 
       {!tenant.hasKey && (
         <Panel className="px-5 py-4 mb-8">
-          <p className="text-2xs font-mono text-warn">
-            ⚠ No LiteLLM key — scans can&apos;t run until provisioned. On the server:{" "}
-            <span className="text-fg">npx tsx scripts/provision-tenant-key.ts {tenant.slug}</span>
+          <p className="text-2xs font-mono text-warn mb-3">
+            ⚠ No LiteLLM key — scans can&apos;t run for this tenant until one is provisioned
+            (mints a metered virtual key on the gateway with this tenant&apos;s budget).
           </p>
+          <ProvisionKeyButton tenantId={tenant.id} />
         </Panel>
       )}
 

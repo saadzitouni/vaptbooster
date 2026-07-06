@@ -60,7 +60,18 @@ async function loadSkillsFromDb(): Promise<string> {
   return parts.length ? parts.join("\n\n---\n\n") : "(no enabled skills in the catalog)";
 }
 
-function loadVirtualKey(tenantId: string): string | null {
+async function loadVirtualKey(tenantId: string): Promise<string | null> {
+  // Preferred: provisioned via the operator UI, stored on the tenant.
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ litellmKey: string | null }[]>(
+      'SELECT "litellmKey" FROM tenants WHERE id = $1',
+      tenantId
+    );
+    if (rows[0]?.litellmKey) return rows[0].litellmKey;
+  } catch {
+    /* column may be absent — fall through to the file */
+  }
+  // Fallback: the .secrets bridge file.
   const file = process.env.LITELLM_KEYS_FILE ?? "../.secrets/litellm-keys.json";
   try {
     if (existsSync(file)) {
@@ -193,7 +204,7 @@ async function main() {
   if (!target) throw new Error(`'${targetUrl}' is not in ${slug}'s scope — add + verify it first.`);
   if (!target.verifiedAt) throw new Error(`'${targetUrl}' is NOT verified — authorization required before active testing.`);
   const operator = await prisma.user.findFirst({ where: { role: "operator" } });
-  const virtualKey = loadVirtualKey(tenant.id);
+  const virtualKey = await loadVirtualKey(tenant.id);
   if (!virtualKey) throw new Error("no LiteLLM virtual key for tenant — provision one first.");
 
   // --- Resolve target IPv4s for the egress allowlist (the box pins the target

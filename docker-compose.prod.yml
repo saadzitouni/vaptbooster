@@ -105,6 +105,9 @@ services:
       # Low-privilege app role → RLS enforced.
       DATABASE_URL: postgresql://vaptbooster_app:${APP_DB_PASSWORD}@postgres:5432/vaptbooster
       REDIS_URL: redis://default:${REDIS_PASSWORD}@redis:6379
+      # For the operator "Provision key" button → calls the LiteLLM admin API.
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?LITELLM_MASTER_KEY is required}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_TRUST_HOST: "true"
       # Override in .env when serving over plain HTTP (e.g. NEXTAUTH_URL=http://<ip>:8080)
