@@ -22,6 +22,7 @@
 import { Worker, Job, type ConnectionOptions } from "bullmq";
 import IORedis from "ioredis";
 import { existsSync, readFileSync } from "fs";
+import { randomUUID } from "crypto";
 import { PrismaClient, ScanStatus, Severity, FindingStatus } from "@prisma/client";
 import { runRecon } from "./recon/agent.js";
 import type { ReconResults } from "./recon/tools.js";
@@ -265,6 +266,13 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     },
     "scan_completed"
   );
+
+  await notifyScanRequester(
+    scanId,
+    totalVulns > 0 ? "finding_critical" : "scan_completed",
+    `Scan completed — ${totalVulns} finding${totalVulns === 1 ? "" : "s"}`,
+    scan.targetValue
+  );
 }
 
 // Persist Stage 2 passive findings (real severities, CWE, remediation).
@@ -373,6 +381,31 @@ async function failScan(scanId: string, reason: string) {
       currentStep: reason,
     },
   });
+  await notifyScanRequester(scanId, "scan_failed", "Scan failed", reason);
+}
+
+// Notify the scan's requester (in-app). Raw SQL — the worker's generated client
+// predates the notifications table.
+async function notifyScanRequester(scanId: string, type: string, title: string, body: string) {
+  try {
+    const scan = await prisma.scan.findUnique({
+      where: { id: scanId },
+      select: { requesterId: true, tenantId: true },
+    });
+    if (!scan?.requesterId) return;
+    await prisma.$executeRawUnsafe(
+      'INSERT INTO notifications (id, "userId", "tenantId", type, title, body, link, "createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7, now())',
+      randomUUID(),
+      scan.requesterId,
+      scan.tenantId,
+      type,
+      title,
+      body.slice(0, 500),
+      `/scans/${scanId}`
+    );
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "notify_failed");
+  }
 }
 
 async function loadTenantVirtualKey(tenantId: string): Promise<string | null> {

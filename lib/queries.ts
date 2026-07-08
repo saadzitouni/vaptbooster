@@ -379,6 +379,59 @@ export async function getOperatorTenantDetail(tenantId: string) {
   });
 }
 
+// -------------------------------------------------------------
+// Notifications (per recipient user)
+// -------------------------------------------------------------
+export type NotifUser = { id: string; role: string; tenantId: string | null };
+export type NotificationView = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
+function mapNotif(n: {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: Date | null;
+  createdAt: Date;
+}): NotificationView {
+  return {
+    id: n.id,
+    type: n.type,
+    title: n.title,
+    body: n.body,
+    link: n.link,
+    readAt: n.readAt ? n.readAt.toISOString() : null,
+    createdAt: n.createdAt.toISOString(),
+  };
+}
+
+export async function getNotifications(user: NotifUser): Promise<{ items: NotificationView[]; unread: number }> {
+  if (user.role === "operator") {
+    return withOperator(async (db) => {
+      const [rows, unread] = await Promise.all([
+        db.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 25 }),
+        db.notification.count({ where: { userId: user.id, readAt: null } }),
+      ]);
+      return { items: rows.map(mapNotif), unread };
+    });
+  }
+  return withTenant(user.tenantId ?? "", async (db) => {
+    const [rows, unread] = await Promise.all([
+      db.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 25 }),
+      db.notification.count({ where: { userId: user.id, readAt: null } }),
+    ]);
+    return { items: rows.map(mapNotif), unread };
+  });
+}
+
 export { ROOT_DOMAIN };
 
 // -------------------------------------------------------------

@@ -9,6 +9,7 @@ import { requireOperator } from "@/lib/session";
 import { getOperatorTenantDetail, ROOT_DOMAIN } from "@/lib/queries";
 import { OperatorScopePanel } from "@/components/operator/OperatorScopePanel";
 import { ProvisionKeyButton } from "@/components/operator/ProvisionKeyButton";
+import { MessageTenantForm } from "@/components/operator/MessageTenantForm";
 import { timeAgo } from "@/lib/utils";
 
 export default async function OperatorTenantDetailPage({
@@ -66,6 +67,11 @@ export default async function OperatorTenantDetailPage({
           <ProvisionKeyButton tenantId={tenant.id} />
         </Panel>
       )}
+
+      {/* Message the tenant */}
+      <div className="mb-8">
+        <MessageTenantForm tenantId={tenant.id} />
+      </div>
 
       {/* Scope + verification */}
       <div className="mb-10">

@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { auth } from "@/auth";
 import { withTenant } from "@/lib/db";
+import { getNotifications } from "@/lib/queries";
 
 export default async function TenantLayout({
   children,
@@ -25,6 +26,12 @@ export default async function TenantLayout({
     email: session.user.email ?? "",
   };
 
+  const notifications = await getNotifications({
+    id: session.user.id,
+    role: session.user.role,
+    tenantId: session.user.tenantId ?? null,
+  });
+
   return (
     <div className="flex min-h-screen">
       <Sidebar
@@ -32,7 +39,11 @@ export default async function TenantLayout({
         tenantName={tenant?.name ?? session.user.tenantSlug ?? "—"}
       />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar user={user} tenantSlug={tenant?.slug ?? session.user.tenantSlug ?? undefined} />
+        <Topbar
+          user={user}
+          tenantSlug={tenant?.slug ?? session.user.tenantSlug ?? undefined}
+          notifications={notifications}
+        />
         <main className="flex-1 px-6 md:px-10 py-8 md:py-10 max-w-[1280px] w-full">
           {children}
         </main>

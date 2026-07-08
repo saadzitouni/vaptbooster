@@ -79,9 +79,29 @@ model User {
   // Audit trail — who initiated what
   requestedScans  Scan[]    @relation("ScanRequester")
   approvedScans   Scan[]    @relation("ScanApprover")
+  notifications   Notification[]
 
   @@index([tenantId])
   @@map("users")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   // recipient
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId  String?  // context (null for operator-level notifications)
+
+  type      String   // scan_completed | scan_failed | finding_critical | scan_approved | scan_rejected | message
+  title     String
+  body      String?  @db.Text
+  link      String?  // in-app deep link, e.g. /scans/<id>
+
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
 }
 
 enum UserRole {

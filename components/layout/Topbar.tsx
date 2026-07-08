@@ -2,13 +2,16 @@
 
 import { signOut } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { NotificationBell, type NotifItem } from "@/components/layout/NotificationBell";
 
 export function Topbar({
   user,
   tenantSlug,
+  notifications,
 }: {
   user: { name: string; email: string };
   tenantSlug?: string;
+  notifications?: { items: NotifItem[]; unread: number };
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-ink/85 backdrop-blur-md">
@@ -30,6 +33,9 @@ export function Topbar({
             <span className="text-fg-mute">queue:</span>
             <span className="text-ok pulse-dot">open</span>
           </div>
+          {notifications && (
+            <NotificationBell items={notifications.items} unread={notifications.unread} />
+          )}
           <div className="flex items-center gap-2">
             <Avatar name={user.name} />
             <div className="hidden sm:block leading-tight">
