@@ -414,22 +414,28 @@ function mapNotif(n: {
 }
 
 export async function getNotifications(user: NotifUser): Promise<{ items: NotificationView[]; unread: number }> {
-  if (user.role === "operator") {
-    return withOperator(async (db) => {
+  // Notifications must NEVER break a page — the bell renders on every layout.
+  // If the query fails (e.g. the table isn't migrated yet), degrade to empty.
+  try {
+    if (user.role === "operator") {
+      return await withOperator(async (db) => {
+        const [rows, unread] = await Promise.all([
+          db.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 25 }),
+          db.notification.count({ where: { userId: user.id, readAt: null } }),
+        ]);
+        return { items: rows.map(mapNotif), unread };
+      });
+    }
+    return await withTenant(user.tenantId ?? "", async (db) => {
       const [rows, unread] = await Promise.all([
         db.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 25 }),
         db.notification.count({ where: { userId: user.id, readAt: null } }),
       ]);
       return { items: rows.map(mapNotif), unread };
     });
+  } catch {
+    return { items: [], unread: 0 };
   }
-  return withTenant(user.tenantId ?? "", async (db) => {
-    const [rows, unread] = await Promise.all([
-      db.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 25 }),
-      db.notification.count({ where: { userId: user.id, readAt: null } }),
-    ]);
-    return { items: rows.map(mapNotif), unread };
-  });
 }
 
 export { ROOT_DOMAIN };
