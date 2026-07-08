@@ -273,18 +273,51 @@ enum FindingStatus {
 }
 
 // -------------------------------------------------------------
-// Reports — PDFs generated per scan
+// Reports — editable engagement deliverables (exported to PDF in-browser)
+//
+// A report is a standalone document a tenant OR operator authors. Findings
+// are SNAPSHOTTED into `findings` (JSON) at import time, so the deliverable
+// is point-in-time and doesn't mutate when the underlying Finding rows change.
 // -------------------------------------------------------------
 model Report {
   id        String   @id @default(cuid())
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  scanId    String
-  scan      Scan     @relation(fields: [scanId], references: [id], onDelete: Cascade)
 
-  s3Key     String
+  // Optional provenance — the scan the findings were pulled from (if any).
+  // SetNull (not Cascade): deleting a scan must not destroy a delivered report.
+  scanId    String?
+  scan      Scan?    @relation(fields: [scanId], references: [id], onDelete: SetNull)
+
+  // Authorship (audit) — who created it and from which side.
+  createdById   String?
+  createdByRole String  @default("tenant") // "tenant" | "operator"
+
+  // -------- Editable document surface --------
+  title            String  @default("Security Assessment Report")
+  clientName       String  @default("")
+  clientTagline    String? // e.g. "fintech" — renders as "ACME Corp · fintech"
+  engagementRef    String? // e.g. "ENGAGEMENT REPORT · Q3 2026"
+  preparedBy       String  @default("PWNTROL")
+  logoDataUrl      String? @db.Text // client logo, base64 data URI (no object store needed)
+
+  executiveSummary String? @db.Text
+  scopeText        String? @db.Text
+  methodology      String? @db.Text
+
+  // Snapshot of findings included in the report.
+  // Shape: { id, title, severity, cwe, location, description, remediation }[]
+  findings         Json    @default("[]")
+
+  status           String  @default("draft") // draft | final
+  confidential     Boolean @default(true)
+
+  // Legacy / future PDF archive key — now optional.
+  s3Key     String?
   format    String   @default("pdf")
+
   generatedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([tenantId])
   @@map("reports")

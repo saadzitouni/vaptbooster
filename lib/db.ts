@@ -65,7 +65,7 @@ export { prisma };
 
 // The transaction client exposes the same model API as PrismaClient
 // minus the top-level connection/extension methods.
-type TxClient = Omit<
+export type TxClient = Omit<
   PrismaClient,
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;

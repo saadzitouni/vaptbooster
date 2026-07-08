@@ -22,6 +22,7 @@ const OPERATOR_NAV: NavItem[] = [
   { href: "/operator/queue",        label: "Queue",        icon: <IconQueue /> },
   { href: "/operator/usage",        label: "Usage",        icon: <IconChart /> },
   { href: "/operator/findings",     label: "Findings",     icon: <IconBug /> },
+  { href: "/operator/reports",      label: "Reports",      icon: <IconReport /> },
   { href: "/operator/skills",       label: "Skills",       icon: <IconBrain /> },
   { href: "/operator/agent-config", label: "Agent config", icon: <IconCog /> },
   { href: "/operator/invites",      label: "Invites",      icon: <IconMail /> },

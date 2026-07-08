@@ -79,3 +79,179 @@
     text-transform: uppercase;
   }
 }
+
+/* =============================================================
+   REPORT DOCUMENT — PWNTROL brand spec v1.0
+   Self-contained light "paper" design system, independent of the
+   app's dark Tailwind tokens. Renders on screen as a paper card and
+   prints 1:1 to PDF (browser "Save as PDF").
+   ============================================================= */
+.report-doc {
+  --ink: #0a0a0a;
+  --ink-2: #101010;
+  --graphite: #1f1f1f;
+  --bone: #ededed;
+  --paper: #fafaf7;
+  --paper-2: #f2f1ec;
+  --slate: #4a4a4a;
+  --stone: #8a8a85;
+
+  width: 210mm;
+  max-width: 100%;
+  margin: 0 auto;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.report-doc * { box-sizing: border-box; }
+
+/* Fraunces italic emphasis — two per page max, per the spec. */
+.report-doc .rd-em {
+  font-family: var(--font-serif), "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: "opsz" 144, "SOFT" 50;
+}
+.report-doc .rd-em-sm {
+  font-family: var(--font-serif), "Fraunces", Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: "opsz" 96, "SOFT" 50;
+}
+
+.report-doc .rd-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--stone);
+}
+.report-doc .rd-mark { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.report-doc .rd-mark .dot { width: 8px; height: 8px; background: currentColor; border-radius: 1px; }
+.report-doc .rd-mark .sep { color: var(--stone); }
+.report-doc .rd-logo { max-height: 44px; max-width: 220px; object-fit: contain; }
+
+/* ---------- Cover (always dark ink) ---------- */
+.report-doc .rd-cover {
+  background: var(--ink);
+  color: var(--bone);
+  padding: 40px 44px 34px;
+  min-height: 247mm;
+  display: flex;
+  flex-direction: column;
+}
+.report-doc .rd-cover .rd-mark { color: var(--bone); }
+.report-doc .rd-cover-body { margin-top: auto; }
+.report-doc .rd-cover-title {
+  font-size: 46px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+  margin: 10px 0 2px;
+  word-break: break-word;
+}
+.report-doc .rd-cover-em {
+  font-size: 50px;
+  line-height: 1.05;
+  display: block;
+  margin-bottom: 22px;
+}
+.report-doc .rd-cover-meta { font-size: 13px; color: var(--stone); }
+.report-doc .rd-cover-meta strong { color: var(--bone); font-weight: 500; }
+.report-doc .rd-cover-rule { border: 0; border-top: 1px solid var(--graphite); margin: 26px 0 12px; }
+.report-doc .rd-cover-foot { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--stone); }
+
+/* ---------- Body (paper) ---------- */
+.report-doc .rd-body { padding: 34px 44px 20px; }
+.report-doc .rd-section { margin-bottom: 30px; }
+.report-doc .rd-section-title {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--paper-2);
+}
+.report-doc .rd-prose { font-size: 13px; color: var(--slate); white-space: pre-wrap; }
+.report-doc .rd-muted { color: var(--stone); }
+
+/* Severity summary — small stat chips (no fills; hairline frames) */
+.report-doc .rd-summary { display: flex; flex-wrap: wrap; gap: 10px; }
+.report-doc .rd-sev {
+  border: 1px solid var(--paper-2);
+  border-left-width: 3px;
+  padding: 8px 14px 8px 12px;
+  min-width: 92px;
+}
+.report-doc .rd-sev .n { font-size: 22px; font-weight: 500; line-height: 1; }
+.report-doc .rd-sev .k { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--stone); margin-top: 5px; }
+
+/* Findings — severity encoded as a thin LEFT border (never a fill) */
+.report-doc .rd-finding {
+  border-left: 3px solid var(--stone);
+  background: var(--paper-2);
+  padding: 12px 16px 14px;
+  margin-bottom: 12px;
+}
+.report-doc .rd-finding-title { font-size: 14px; font-weight: 500; margin: 0 0 6px; }
+.report-doc .rd-finding-meta {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--stone);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-bottom: 8px;
+}
+.report-doc .rd-finding-meta .sev { font-weight: 500; text-transform: uppercase; }
+.report-doc .rd-finding-body { font-size: 12.5px; color: var(--slate); white-space: pre-wrap; }
+.report-doc .rd-fix-label {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--stone);
+  margin: 10px 0 3px;
+}
+
+.report-doc .rd-footer {
+  border-top: 1px solid var(--paper-2);
+  padding: 12px 44px 20px;
+  font-size: 11px;
+  color: var(--stone);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* On-screen chrome around the paper preview (dark app background) */
+.report-shell {
+  min-height: 100vh;
+  background: #050505;
+  padding: 24px 16px 64px;
+}
+.report-doc-frame {
+  margin: 0 auto;
+  max-width: 210mm;
+  border: 1px solid #1f1f1f;
+  box-shadow: 0 0 0 1px #000;
+}
+
+/* ---------- Print: 1:1 to PDF ---------- */
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #fff !important; }
+  body::before { display: none !important; } /* kill the grain overlay */
+  .no-print { display: none !important; }
+  .report-shell { background: #fff; padding: 0; }
+  .report-doc-frame { border: 0; box-shadow: none; max-width: none; }
+  .report-doc { width: 100%; margin: 0; box-shadow: none; }
+  .report-doc .rd-cover { min-height: 100vh; break-after: page; page-break-after: always; }
+  .report-doc .rd-body { padding: 16mm 16mm 8mm; }
+  .report-doc .rd-footer { padding: 8mm 16mm; }
+  .report-doc .rd-finding,
+  .report-doc .rd-section { break-inside: avoid; }
+}

@@ -11,6 +11,11 @@ import { withTenant, withOperator } from "@/lib/db";
 import type { Tenant, Scan, Finding, Severity } from "@/lib/mock-data";
 import type { MockUsageSummary } from "@/lib/mock-usage";
 import type { MockSkill, MockAgentConfig, SkillAltitude } from "@/lib/mock-skills";
+import {
+  normalizeFindings,
+  type ReportDoc,
+  type ReportListItem,
+} from "@/lib/report";
 
 // -------------------------------------------------------------
 // helpers
@@ -436,6 +441,185 @@ export async function getNotifications(user: NotifUser): Promise<{ items: Notifi
   } catch {
     return { items: [], unread: 0 };
   }
+}
+
+// -------------------------------------------------------------
+// Reports (editable engagement deliverables)
+// -------------------------------------------------------------
+type ReportRow = {
+  id: string;
+  tenantId: string;
+  scanId: string | null;
+  createdByRole: string;
+  title: string;
+  clientName: string;
+  clientTagline: string | null;
+  engagementRef: string | null;
+  preparedBy: string;
+  logoDataUrl: string | null;
+  executiveSummary: string | null;
+  scopeText: string | null;
+  methodology: string | null;
+  findings: unknown;
+  status: string;
+  confidential: boolean;
+  generatedAt: Date;
+  updatedAt: Date;
+  tenant?: { name: string } | null;
+};
+
+function mapReportDoc(r: ReportRow): ReportDoc {
+  return {
+    id: r.id,
+    tenantId: r.tenantId,
+    tenantName: r.tenant?.name ?? "",
+    scanId: r.scanId,
+    createdByRole: r.createdByRole,
+    title: r.title,
+    clientName: r.clientName,
+    clientTagline: r.clientTagline,
+    engagementRef: r.engagementRef,
+    preparedBy: r.preparedBy,
+    logoDataUrl: r.logoDataUrl,
+    executiveSummary: r.executiveSummary,
+    scopeText: r.scopeText,
+    methodology: r.methodology,
+    findings: normalizeFindings(r.findings),
+    status: r.status,
+    confidential: r.confidential,
+    generatedAt: r.generatedAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  };
+}
+
+// List (light — never selects the logo data URI).
+const REPORT_LIST_SELECT = {
+  id: true,
+  title: true,
+  clientName: true,
+  status: true,
+  findings: true,
+  updatedAt: true,
+} as const;
+
+export async function getTenantReports(
+  tenantId: string
+): Promise<ReportListItem[]> {
+  return withTenant(tenantId, async (db) => {
+    const rows = await db.report.findMany({
+      orderBy: { updatedAt: "desc" },
+      select: REPORT_LIST_SELECT,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      clientName: r.clientName,
+      status: r.status,
+      findingCount: normalizeFindings(r.findings).length,
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  });
+}
+
+export async function getTenantReport(
+  tenantId: string,
+  id: string
+): Promise<ReportDoc | null> {
+  return withTenant(tenantId, async (db) => {
+    const r = await db.report.findFirst({
+      where: { id },
+      include: { tenant: { select: { name: true } } },
+    });
+    return r ? mapReportDoc(r as ReportRow) : null;
+  });
+}
+
+export async function getOperatorReports(): Promise<ReportListItem[]> {
+  return withOperator(async (db) => {
+    const rows = await db.report.findMany({
+      orderBy: { updatedAt: "desc" },
+      select: { ...REPORT_LIST_SELECT, tenant: { select: { name: true } } },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      clientName: r.clientName,
+      status: r.status,
+      findingCount: normalizeFindings(r.findings).length,
+      tenantName: r.tenant?.name ?? "",
+      updatedAt: r.updatedAt.toISOString(),
+    }));
+  });
+}
+
+export async function getOperatorReport(id: string): Promise<ReportDoc | null> {
+  return withOperator(async (db) => {
+    const r = await db.report.findUnique({
+      where: { id },
+      include: { tenant: { select: { name: true } } },
+    });
+    return r ? mapReportDoc(r as ReportRow) : null;
+  });
+}
+
+// Role-aware loader for the shared print route.
+export async function getReportForPrint(
+  user: NotifUser,
+  id: string
+): Promise<ReportDoc | null> {
+  if (user.role === "operator") return getOperatorReport(id);
+  if (!user.tenantId) return null;
+  return getTenantReport(user.tenantId, id);
+}
+
+// Scans a report can import findings from (only those that produced findings).
+export type ImportableScan = {
+  id: string;
+  targetValue: string;
+  status: string;
+  completedAt: string | null;
+  findingCount: number;
+};
+
+function mapImportableScan(s: {
+  id: string;
+  targetValue: string;
+  status: string;
+  completedAt: Date | null;
+  _count: { findings: number };
+}): ImportableScan {
+  return {
+    id: s.id,
+    targetValue: s.targetValue,
+    status: s.status as string,
+    completedAt: s.completedAt ? s.completedAt.toISOString() : null,
+    findingCount: s._count.findings,
+  };
+}
+
+export async function getTenantImportableScans(
+  tenantId: string
+): Promise<ImportableScan[]> {
+  return withTenant(tenantId, async (db) => {
+    const rows = await db.scan.findMany({
+      orderBy: { requestedAt: "desc" },
+      include: { _count: { select: { findings: true } } },
+    });
+    return rows.filter((s) => s._count.findings > 0).map(mapImportableScan);
+  });
+}
+
+export async function getOperatorImportableScans(
+  tenantId: string
+): Promise<ImportableScan[]> {
+  return withOperator(async (db) => {
+    const rows = await db.scan.findMany({
+      where: { tenantId },
+      orderBy: { requestedAt: "desc" },
+      include: { _count: { select: { findings: true } } },
+    });
+    return rows.filter((s) => s._count.findings > 0).map(mapImportableScan);
+  });
 }
 
 export { ROOT_DOMAIN };
