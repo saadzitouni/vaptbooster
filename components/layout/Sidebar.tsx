@@ -82,14 +82,6 @@ export function Sidebar({
           );
         })}
       </nav>
-
-      {/* Footer status */}
-      <div className="px-5 py-4 border-t border-line text-2xs text-fg-mute font-mono">
-        <div className="flex items-center justify-between">
-          <span>engine</span>
-          <span className="text-ok pulse-dot">healthy</span>
-        </div>
-      </div>
     </aside>
   );
 }

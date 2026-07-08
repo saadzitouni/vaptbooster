@@ -29,10 +29,6 @@ export function Topbar({
 
         {/* User cluster */}
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-3 text-2xs font-mono">
-            <span className="text-fg-mute">queue:</span>
-            <span className="text-ok pulse-dot">open</span>
-          </div>
           {notifications && (
             <NotificationBell items={notifications.items} unread={notifications.unread} />
           )}
