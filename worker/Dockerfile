@@ -31,9 +31,14 @@ COPY worker/src ./src
 FROM node:22-alpine AS runner
 WORKDIR /app/worker
 ENV NODE_ENV=production
-RUN apk add --no-cache openssl
+# openssl for Prisma engines; docker-cli so the worker can launch the
+# egress-locked agent sandbox when AGENT_MODE=autonomous (needs the host
+# Docker socket mounted — see docker-compose.prod.yml).
+RUN apk add --no-cache openssl docker-cli
 # Brings node_modules (with the generated client), prisma/, and src.
 COPY --from=build /app/worker ./
-USER node
-# The worker reads REDIS_URL / DATABASE_URL / LITELLM_* / SIMULATE_LLM from env.
+# NOTE: runs as root so it can reach the mounted /var/run/docker.sock in
+# autonomous mode. The worker is an internal-only service (no public port).
+# The deterministic pipeline does not need Docker access.
+# The worker reads REDIS_URL / DATABASE_URL / LITELLM_* / SIMULATE_LLM / AGENT_MODE from env.
 CMD ["npm", "run", "start"]

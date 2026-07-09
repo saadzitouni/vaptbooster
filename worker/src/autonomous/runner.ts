@@ -10,10 +10,12 @@
 // The brain runs here (free LLM access) and executes each command via
 // `docker exec`, so nothing the agent does can reach an out-of-scope host.
 //
-// Usage:
-//   DATABASE_URL=<owner> LITELLM_BASE_URL=… \
-//   npx tsx src/autonomous/runner.ts <tenantSlug> <targetUrl> \
-//     [--budget=10] [--model=vaptbooster-default] [--target-ip=IP] [--network=NET] [--max-turns=80]
+// Two entry points:
+//   • CLI (this file run directly): resolves scope, creates its own scan row.
+//       DATABASE_URL=<owner> LITELLM_BASE_URL=… \
+//       npx tsx src/autonomous/runner.ts <tenantSlug> <targetUrl> [--budget=10] …
+//   • runAutonomousScan(): called by the scan worker on an EXISTING scan row
+//       (worker already did the scope/verify/key gate). Same engine.
 // =============================================================
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -23,7 +25,6 @@ import OpenAI from "openai";
 import { PrismaClient, ScanStatus, Severity, FindingStatus } from "@prisma/client";
 
 const exec = promisify(execFile);
-const prisma = new PrismaClient();
 
 const IMAGE = process.env.SANDBOX_IMAGE ?? "vaptbooster-agent-sandbox:latest";
 const LITELLM_URL = process.env.LITELLM_BASE_URL ?? "http://localhost:4000";
@@ -42,7 +43,7 @@ function arg(name: string, def?: string): string | undefined {
 // The bridge: the agent's methodology comes from the operator-editable skill
 // catalog in the DB (enabled strategic + tactical skills, current published
 // version). Edit a skill in /operator/skills → the next scan uses it. No deploy.
-async function loadSkillsFromDb(): Promise<string> {
+async function loadSkillsFromDb(prisma: PrismaClient): Promise<string> {
   const skills = await prisma.skill.findMany({
     where: { enabled: true, altitude: { in: ["strategic", "tactical"] } },
     include: { currentVersion: true },
@@ -60,7 +61,7 @@ async function loadSkillsFromDb(): Promise<string> {
   return parts.length ? parts.join("\n\n---\n\n") : "(no enabled skills in the catalog)";
 }
 
-async function loadVirtualKey(tenantId: string): Promise<string | null> {
+async function loadVirtualKey(prisma: PrismaClient, tenantId: string): Promise<string | null> {
   // Preferred: provisioned via the operator UI, stored on the tenant.
   try {
     const rows = await prisma.$queryRawUnsafe<{ litellmKey: string | null }[]>(
@@ -182,85 +183,100 @@ async function docker(args: string[], timeoutMs = 30000): Promise<{ out: string;
   }
 }
 
-async function main() {
-  const slug = process.argv[2];
-  const targetUrl = process.argv[3];
-  if (!slug || !targetUrl) {
-    console.error("usage: runner.ts <tenantSlug> <targetUrl> [--budget=10] [--model=…] [--target-ip=IP] [--network=NET]");
-    process.exit(1);
-  }
-  const budgetUsd = parseFloat(arg("budget", "10")!);
-  const budgetCents = Math.round(budgetUsd * 100);
-  const model = arg("model", "vaptbooster-default")!;
-  const maxTurns = parseInt(arg("max-turns", "80")!, 10);
-  const network = arg("network");
-  const targetIpArg = arg("target-ip");
+// =============================================================
+// The engine — runs the agent against an EXISTING scan row. Used by both the
+// CLI (below) and the scan worker. Updates progress/spend/agentLog/findings and
+// sets the terminal scan status. Never throws — returns a result the caller
+// uses for notifications/credits.
+// =============================================================
+export type AutonomousResult = {
+  status: "completed" | "failed";
+  spentCents: number;
+  findings: { severity: string; title: string }[];
+  error?: string;
+};
+
+export async function runAutonomousScan(opts: {
+  prisma: PrismaClient;
+  scanId: string;
+  tenantId: string;
+  targetUrl: string;
+  fallbackLocation: string; // finding location if the agent omits one
+  virtualKey: string;
+  budgetCents: number;
+  model?: string;
+  maxTurns?: number;
+  targetIp?: string;
+  network?: string;
+}): Promise<AutonomousResult> {
+  const { prisma, scanId, tenantId, targetUrl, virtualKey } = opts;
+  const model = opts.model ?? "vaptbooster-default";
+  const maxTurns = opts.maxTurns ?? 80;
+  const budgetCents = opts.budgetCents;
   const host = new URL(targetUrl).hostname;
-
-  // --- Authorization gate: the target must be a VERIFIED scope target ---
-  const tenant = await prisma.tenant.findUnique({ where: { slug } });
-  if (!tenant) throw new Error(`tenant not found: ${slug}`);
-  const target = await prisma.scopeTarget.findFirst({ where: { tenantId: tenant.id, value: targetUrl } });
-  if (!target) throw new Error(`'${targetUrl}' is not in ${slug}'s scope — add + verify it first.`);
-  if (!target.verifiedAt) throw new Error(`'${targetUrl}' is NOT verified — authorization required before active testing.`);
-  const operator = await prisma.user.findFirst({ where: { role: "operator" } });
-  const virtualKey = await loadVirtualKey(tenant.id);
-  if (!virtualKey) throw new Error("no LiteLLM virtual key for tenant — provision one first.");
-
-  // --- Resolve target IPv4s for the egress allowlist (the box pins the target
-  //     over IPv4; IPv6 is blocked outright in the sandbox). ---
-  const ips = targetIpArg
-    ? [targetIpArg]
-    : (await lookup(host, { all: true })).filter((a) => a.family === 4).map((a) => a.address);
-  if (!ips.length) throw new Error(`could not resolve an IPv4 for ${host}`);
-
-  // --- Create the scan record ---
-  const scan = await prisma.scan.create({
-    data: {
-      tenantId: tenant.id,
-      targetId: target.id,
-      targetValue: target.value,
-      status: ScanStatus.running,
-      requesterId: operator?.id,
-      approverId: operator?.id,
-      approvedAt: new Date(),
-      startedAt: new Date(),
-      notes: "Autonomous agent run",
-      currentStep: "launching sandbox",
-      progress: 5,
-    },
-  });
-  console.log(`scan ${scan.id} · watch http://localhost:3000/scans/${scan.id}`);
 
   const events: { ts: string; actor: string; level: string; msg: string }[] = [];
   const log = async (actor: string, level: string, msg: string) => {
     events.push({ ts: new Date().toISOString(), actor, level, msg });
-    await prisma.$executeRawUnsafe('UPDATE scans SET "agentLog" = $1::jsonb WHERE id = $2', JSON.stringify(events), scan.id);
+    await prisma
+      .$executeRawUnsafe('UPDATE scans SET "agentLog" = $1::jsonb WHERE id = $2', JSON.stringify(events), scanId)
+      .catch(() => {});
   };
 
-  // --- Launch the egress-locked sandbox ---
+  const findings: { severity: string; title: string }[] = [];
+  let spentCents = 0;
+
+  // Resolve target IPv4s for the egress allowlist (IPv6 blocked in the sandbox).
+  let ips: string[];
+  try {
+    ips = opts.targetIp
+      ? [opts.targetIp]
+      : (await lookup(host, { all: true })).filter((a) => a.family === 4).map((a) => a.address);
+  } catch (e) {
+    ips = [];
+  }
+  if (!ips.length) {
+    const msg = `could not resolve an IPv4 for ${host}`;
+    await log("system", "crit", `agent halted: ${msg}`);
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { status: ScanStatus.failed, completedAt: new Date(), currentStep: msg, progress: 100 },
+    });
+    return { status: "failed", spentCents: 0, findings: [], error: msg };
+  }
+
+  // Launch the egress-locked sandbox.
   const runArgs = ["run", "-d", "--rm", "--cap-add=NET_ADMIN"];
-  if (network) runArgs.push("--network", network);
+  if (opts.network) runArgs.push("--network", opts.network);
   for (const ip of ips) runArgs.push("--add-host", `${host}:${ip}`);
   runArgs.push("-e", `ALLOWED_IPS=${ips.join(" ")}`, IMAGE);
   const launched = await docker(runArgs, 60000);
   const cid = launched.out.trim();
   if (!cid || launched.code !== 0) {
-    await prisma.scan.update({ where: { id: scan.id }, data: { status: ScanStatus.failed, currentStep: `sandbox launch failed: ${launched.err.slice(0, 120)}` } });
-    throw new Error(`sandbox launch failed: ${launched.err}`);
+    const msg = `sandbox launch failed: ${launched.err.slice(0, 120)}`;
+    await log("system", "crit", msg);
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: { status: ScanStatus.failed, completedAt: new Date(), currentStep: msg, progress: 100 },
+    });
+    return { status: "failed", spentCents: 0, findings: [], error: msg };
   }
-  await log("system", "info", `autonomous agent · sandbox ${cid.slice(0, 12)} · egress-locked → ${ips.join(", ")}`);
-  await log("system", "info", `target ${targetUrl} · model ${model} · budget $${budgetUsd.toFixed(2)}`);
 
-  const findings: { severity: string; title: string }[] = [];
-  let spentCents = 0;
+  await log("system", "info", `autonomous agent · sandbox ${cid.slice(0, 12)} · egress-locked → ${ips.join(", ")}`);
+  await log("system", "info", `target ${targetUrl} · model ${model} · budget $${(budgetCents / 100).toFixed(2)}`);
+
   let terminal: ScanStatus = ScanStatus.completed;
   let failMsg: string | null = null;
 
   try {
-    const client = new OpenAI({ apiKey: virtualKey, baseURL: LITELLM_URL, defaultHeaders: { "x-litellm-metadata": JSON.stringify({ tenant_id: tenant.id, scan_id: scan.id, operation: "autonomous" }) } });
-    const skillsText = await loadSkillsFromDb(); // operator-editable methodology from the DB
+    const client = new OpenAI({
+      apiKey: virtualKey,
+      baseURL: LITELLM_URL,
+      defaultHeaders: { "x-litellm-metadata": JSON.stringify({ tenant_id: tenantId, scan_id: scanId, operation: "autonomous" }) },
+    });
+    const skillsText = await loadSkillsFromDb(prisma);
     await log("system", "info", `loaded ${skillsText.split("## Skill:").length - 1} skill(s) from the catalog`);
+
     const system = `You are VAPTBOOSTER's autonomous penetration-testing agent. You operate a shell INSIDE an egress-locked sandbox that can reach ONLY the authorized target: ${targetUrl}. Tools available in the box: curl, python3 (with requests), jq, openssl, standard unix tools.
 
 Conduct a thorough, professional, AUTHORIZED penetration test of the target and report every confirmed vulnerability.
@@ -270,7 +286,7 @@ RULES:
 - NON-DESTRUCTIVE: detection payloads only. Never transfer money, delete/modify real data, change real users' credentials, spam, or DoS. Creating ONE throwaway test account to authenticate is allowed.
 - Report a finding ONLY with concrete evidence (reflected payload, DB error text, two different IDOR records, a protected endpoint served without a token, etc.).
 - Call report_finding the MOMENT you confirm each issue — do NOT batch them until the end. Report as you go.
-- You have a fixed budget of ~$${budgetUsd.toFixed(2)}. Spend it efficiently; when the surface is covered or budget is low, call finish.
+- You have a fixed budget of ~$${(budgetCents / 100).toFixed(2)}. Spend it efficiently; when the surface is covered or budget is low, call finish.
 
 Use bash to run commands, report_finding for confirmed issues, finish to end.
 
@@ -287,16 +303,31 @@ ${skillsText}`;
         await log("system", "warn", `budget reached ($${(spentCents / 100).toFixed(2)}) — stopping`);
         break;
       }
-      if (turn > 0) await new Promise((r) => setTimeout(r, 1500)); // space out calls (rate limits)
-      trimContext(messages); // keep tokens/min bounded on long engagements
+      if (turn > 0) await new Promise((r) => setTimeout(r, 1500));
+      trimContext(messages);
       const resp = await chatWithRetry(
         client,
         { model, messages, tools: TOOLS, tool_choice: "auto", max_tokens: 2000, temperature: 0.3 },
         async (secs) => log("system", "info", `rate-limited — backing off ${secs}s`)
       );
       spentCents += costCents(resp.usage, model);
-      await prisma.usageRecord.create({ data: { tenantId: tenant.id, scanId: scan.id, operation: "autonomous", model, promptTokens: resp.usage?.prompt_tokens ?? 0, completionTokens: resp.usage?.completion_tokens ?? 0, cachedTokens: 0, costUsdCents: costCents(resp.usage, model), providerRequestId: resp.id } });
-      await prisma.scan.update({ where: { id: scan.id }, data: { spentUsdCents: spentCents, progress: Math.min(10 + turn * 2, 95), currentStep: `agent turn ${turn + 1}` } });
+      await prisma.usageRecord.create({
+        data: {
+          tenantId,
+          scanId,
+          operation: "autonomous",
+          model,
+          promptTokens: resp.usage?.prompt_tokens ?? 0,
+          completionTokens: resp.usage?.completion_tokens ?? 0,
+          cachedTokens: 0,
+          costUsdCents: costCents(resp.usage, model),
+          providerRequestId: resp.id,
+        },
+      }).catch(() => {});
+      await prisma.scan.update({
+        where: { id: scanId },
+        data: { spentUsdCents: spentCents, progress: Math.min(10 + turn * 2, 95), currentStep: `agent turn ${turn + 1}` },
+      });
 
       const msg = resp.choices[0]?.message;
       if (!msg) break;
@@ -321,7 +352,19 @@ ${skillsText}`;
           result = `exit_code=${r.code}\n${combined || "(no output)"}`;
         } else if (tc.function.name === "report_finding") {
           const sev = String(a.severity ?? "info");
-          await prisma.finding.create({ data: { tenantId: tenant.id, scanId: scan.id, title: String(a.title ?? "Finding"), summary: String(a.summary ?? ""), severity: sev as Severity, status: FindingStatus.open, cwe: (a.cwe as string) ?? null, location: String(a.location ?? target.value), remediation: (a.remediation as string) ?? null } });
+          await prisma.finding.create({
+            data: {
+              tenantId,
+              scanId,
+              title: String(a.title ?? "Finding"),
+              summary: String(a.summary ?? ""),
+              severity: sev as Severity,
+              status: FindingStatus.open,
+              cwe: (a.cwe as string) ?? null,
+              location: String(a.location ?? opts.fallbackLocation),
+              remediation: (a.remediation as string) ?? null,
+            },
+          }).catch(() => {});
           findings.push({ severity: sev, title: String(a.title ?? "Finding") });
           await log("system", sev === "critical" || sev === "high" ? "crit" : sev === "medium" ? "warn" : "info", `[${sev.toUpperCase()}] ${a.title}`);
           result = "recorded";
@@ -337,7 +380,6 @@ ${skillsText}`;
       if (finished) break;
     }
   } catch (e) {
-    // A provider/credit/tool error must not leave the scan stuck "running".
     terminal = ScanStatus.failed;
     failMsg = e instanceof Error ? e.message : String(e);
     const brief = /credit|402|budget/i.test(failMsg) ? "LLM provider out of credit" : failMsg.slice(0, 140);
@@ -347,10 +389,95 @@ ${skillsText}`;
     await log("system", "info", `sandbox ${cid.slice(0, 12)} destroyed (ephemeral)`);
   }
 
-  await prisma.scan.update({ where: { id: scan.id }, data: { status: terminal, completedAt: new Date(), progress: 100, currentStep: failMsg ? failMsg.slice(0, 120) : null, spentUsdCents: spentCents, creditsConsumed: 1 } });
-  console.log(`\n=== ${terminal} · $${(spentCents / 100).toFixed(4)} · ${findings.length} findings ===`);
-  for (const f of findings) console.log(`  [${f.severity.toUpperCase()}] ${f.title}`);
+  await prisma.scan.update({
+    where: { id: scanId },
+    data: {
+      status: terminal,
+      completedAt: new Date(),
+      progress: 100,
+      currentStep: failMsg ? failMsg.slice(0, 120) : null,
+      spentUsdCents: spentCents,
+      creditsConsumed: 1,
+    },
+  });
+
+  return {
+    status: terminal === ScanStatus.completed ? "completed" : "failed",
+    spentCents,
+    findings,
+    error: failMsg ?? undefined,
+  };
+}
+
+// =============================================================
+// CLI entry — resolves scope, creates its own scan row, then runs the engine.
+// =============================================================
+async function main() {
+  const prisma = new PrismaClient();
+  const slug = process.argv[2];
+  const targetUrl = process.argv[3];
+  if (!slug || !targetUrl) {
+    console.error("usage: runner.ts <tenantSlug> <targetUrl> [--budget=10] [--model=…] [--target-ip=IP] [--network=NET]");
+    process.exit(1);
+  }
+  const budgetUsd = parseFloat(arg("budget", "10")!);
+  const model = arg("model", "vaptbooster-default")!;
+  const maxTurns = parseInt(arg("max-turns", "80")!, 10);
+  const network = arg("network");
+  const targetIpArg = arg("target-ip");
+
+  // --- Authorization gate: the target must be a VERIFIED scope target ---
+  const tenant = await prisma.tenant.findUnique({ where: { slug } });
+  if (!tenant) throw new Error(`tenant not found: ${slug}`);
+  const target = await prisma.scopeTarget.findFirst({ where: { tenantId: tenant.id, value: targetUrl } });
+  if (!target) throw new Error(`'${targetUrl}' is not in ${slug}'s scope — add + verify it first.`);
+  if (!target.verifiedAt) throw new Error(`'${targetUrl}' is NOT verified — authorization required before active testing.`);
+  const operator = await prisma.user.findFirst({ where: { role: "operator" } });
+  const virtualKey = await loadVirtualKey(prisma, tenant.id);
+  if (!virtualKey) throw new Error("no LiteLLM virtual key for tenant — provision one first.");
+
+  const scan = await prisma.scan.create({
+    data: {
+      tenantId: tenant.id,
+      targetId: target.id,
+      targetValue: target.value,
+      status: ScanStatus.running,
+      requesterId: operator?.id,
+      approverId: operator?.id,
+      approvedAt: new Date(),
+      startedAt: new Date(),
+      notes: "Autonomous agent run (CLI)",
+      currentStep: "launching sandbox",
+      progress: 5,
+    },
+  });
+  console.log(`scan ${scan.id} · watch http://localhost:3000/scans/${scan.id}`);
+
+  const result = await runAutonomousScan({
+    prisma,
+    scanId: scan.id,
+    tenantId: tenant.id,
+    targetUrl,
+    fallbackLocation: target.value,
+    virtualKey,
+    budgetCents: Math.round(budgetUsd * 100),
+    model,
+    maxTurns,
+    targetIp: targetIpArg,
+    network,
+  });
+
+  console.log(`\n=== ${result.status} · $${(result.spentCents / 100).toFixed(4)} · ${result.findings.length} findings ===`);
+  for (const f of result.findings) console.log(`  [${f.severity.toUpperCase()}] ${f.title}`);
   await prisma.$disconnect();
 }
 
-main().catch((e) => { console.error("✗", e instanceof Error ? e.message : e); process.exit(1); });
+// Run the CLI only when this file is the process entrypoint (not when the
+// worker imports runAutonomousScan from it).
+const entry = process.argv[1] ?? "";
+if (entry.endsWith("runner.ts") || entry.endsWith("runner.js")) {
+  main().catch((e) => {
+    console.error("✗", e instanceof Error ? e.message : e);
+    process.exit(1);
+  });
+}

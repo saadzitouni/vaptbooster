@@ -28,11 +28,23 @@ if (process.env.NODE_ENV !== "production") {
   global.__scanQueue = scanQueue;
 }
 
-/** Enqueue a scan for the worker. jobId = scanId dedupes double-approvals. */
-export async function enqueueScan(scanId: string, tenantId: string) {
+/**
+ * Enqueue a scan for the worker. jobId = scanId dedupes double-approvals.
+ *
+ * `active` turns on Stage-3 vulnerability testing (SQLi / IDOR / XSS / form /
+ * API). This is a pentest product and the target is already scope-VERIFIED
+ * (the authorization gate), so active testing is ON by default — a scan that
+ * only did passive header checks would never find SQLi/IDOR. Set
+ * SCAN_ACTIVE=false to fall back to recon+passive only.
+ */
+export async function enqueueScan(
+  scanId: string,
+  tenantId: string,
+  active: boolean = process.env.SCAN_ACTIVE !== "false"
+) {
   await scanQueue.add(
     "scan",
-    { scanId, tenantId },
+    { scanId, tenantId, active },
     { jobId: scanId, removeOnComplete: 200, removeOnFail: 200 }
   );
 }

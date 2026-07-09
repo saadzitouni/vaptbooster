@@ -145,8 +145,18 @@ services:
       # Set to false once per-tenant virtual keys are provisioned + mounted.
       SIMULATE_LLM: ${SIMULATE_LLM:-true}
       LITELLM_KEYS_FILE: /secrets/litellm-keys.json
+      # Scan engine: "deterministic" (recon→passive→active pipeline, default) or
+      # "autonomous" (LLM agent drives the egress-locked sandbox via the DB skill
+      # catalog). Autonomous needs SIMULATE_LLM=false, the sandbox image built on
+      # this host, and the Docker socket mounted below.
+      AGENT_MODE: ${AGENT_MODE:-deterministic}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vaptbooster-agent-sandbox:latest}
     volumes:
       - ./.secrets:/secrets:ro
+      # Autonomous mode launches sibling sandbox containers on the host. This
+      # grants the worker host-Docker control (root-equivalent) — only needed
+      # for AGENT_MODE=autonomous. Safe to leave mounted; unused otherwise.
+      - /var/run/docker.sock:/var/run/docker.sock
 
   # ---- Caddy reverse proxy (TLS + tenant subdomains) — the only public entry ----
   caddy:

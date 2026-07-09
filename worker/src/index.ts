@@ -30,6 +30,7 @@ import { runPassiveChecks, type PassiveFinding } from "./passive/checks.js";
 import { runActiveChecks, type ActiveFinding } from "./active/checks.js";
 import { runFormChecks } from "./active/forms.js";
 import { runApiTests } from "./active/api.js";
+import { runAutonomousScan } from "./autonomous/runner.js";
 import { logger } from "./logger.js";
 
 const prisma = new PrismaClient();
@@ -82,6 +83,52 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     await failScan(
       scanId,
       "Missing tenant LiteLLM virtual key — run scripts/provision-tenant-key.ts"
+    );
+    return;
+  }
+
+  // ---- Autonomous skilled-agent mode (opt-in: AGENT_MODE=autonomous) ----
+  // Runs the LLM agent that drives the egress-locked sandbox using the DB skill
+  // catalog, instead of the deterministic recon→passive→active pipeline. Needs
+  // a real virtual key (so it's gated on !SIMULATE) and Docker access in this
+  // container (socket mount + docker CLI + the sandbox image on the host).
+  if (process.env.AGENT_MODE === "autonomous" && !SIMULATE) {
+    await prisma.scan.update({
+      where: { id: scanId },
+      data: {
+        status: ScanStatus.running,
+        startedAt: new Date(),
+        progress: 5,
+        currentStep: "launching autonomous agent",
+      },
+    });
+    log.info("autonomous_agent_start");
+    const result = await runAutonomousScan({
+      prisma,
+      scanId,
+      tenantId,
+      targetUrl: scan.target.value,
+      fallbackLocation: scan.targetValue,
+      virtualKey,
+      budgetCents: scan.ceilingUsdCents,
+      model: "vaptbooster-default",
+    });
+    if (result.status === "completed") {
+      await prisma.tenantBudget
+        .update({ where: { tenantId }, data: { creditsUsedThisPeriod: { increment: 1 } } })
+        .catch(() => {});
+      await notifyScanRequester(
+        scanId,
+        result.findings.length > 0 ? "finding_critical" : "scan_completed",
+        `Scan completed — ${result.findings.length} finding${result.findings.length === 1 ? "" : "s"}`,
+        scan.targetValue
+      );
+    } else {
+      await notifyScanRequester(scanId, "scan_failed", "Scan failed", result.error ?? "autonomous agent error");
+    }
+    log.info(
+      { status: result.status, findings: result.findings.length, spentUsdCents: result.spentCents },
+      "autonomous_agent_done"
     );
     return;
   }
