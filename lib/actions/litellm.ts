@@ -36,8 +36,11 @@ export async function provisionTenantKey(tenantId: string): Promise<Result> {
         budget_duration: "30d",
         models: ["vaptbooster-default", "vaptbooster-fast", "vaptbooster-deep"],
         metadata: { tenant_id: tenant.id, tenant_slug: tenant.slug },
-        tpm_limit: 200_000,
-        rpm_limit: 500,
+        // The agentic loop re-sends a growing transcript every turn, so a low
+        // TPM throttle stalls scans (LiteLLM 429s the key). max_budget is the
+        // real cost guard; keep the throughput throttle generous.
+        tpm_limit: 4_000_000,
+        rpm_limit: 1_000,
       }),
     });
     if (!res.ok) {
