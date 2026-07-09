@@ -155,10 +155,14 @@ export async function getTenantScanDetail(tenantId: string, scanId: string) {
     });
     const agentLog =
       ((scan as { agentLog?: unknown }).agentLog as AgentLogEntry[] | null) ?? [];
+    // A scan can be resumed only if the autonomous agent left a checkpoint.
+    const st = (scan as { agentState?: { messages?: unknown[] } | null }).agentState;
+    const resumable = !!(st && Array.isArray(st.messages) && st.messages.length);
     return {
       scan: mapScan(scan as ScanRow),
       findings: (findings as FindingRow[]).map(mapFinding),
       agentLog,
+      resumable,
     };
   });
 }

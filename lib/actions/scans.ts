@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { withTenant, withOperator } from "@/lib/db";
+import { auth } from "@/auth";
+import { withTenant, withOperator, type TxClient } from "@/lib/db";
 import { requireTenantUser, requireOperator } from "@/lib/session";
 import { enqueueScan } from "@/lib/queue";
 
@@ -137,4 +138,67 @@ export async function rejectScan(scanId: string) {
   });
   revalidatePath("/operator");
   revalidatePath("/operator/queue");
+}
+
+// -------------------------------------------------------------
+// Resume a failed/paused autonomous scan from its saved checkpoint, so the
+// client isn't re-billed for work already done. Operator or the owning tenant.
+// Only autonomous-mode scans have a checkpoint (agentState); the deterministic
+// pipeline is cheap and simply re-runs.
+// -------------------------------------------------------------
+export async function resumeScan(
+  scanId: string
+): Promise<{ ok: boolean; message: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, message: "Not authenticated." };
+  const isOperator = session.user.role === "operator";
+  const tenantId = session.user.tenantId ?? "";
+  if (!isOperator && !tenantId) return { ok: false, message: "Not authorized." };
+
+  const run = <T>(fn: (db: TxClient) => Promise<T>) =>
+    isOperator ? withOperator(fn) : withTenant(tenantId, fn);
+
+  const RESUMABLE = ["failed", "paused_ceiling", "cancelled"];
+  let targetTenantId = "";
+  try {
+    await run(async (db) => {
+      const scan = await db.scan.findFirst({
+        where: { id: scanId },
+        select: { id: true, status: true, tenantId: true, agentState: true },
+      });
+      if (!scan) throw new Error("Scan not found.");
+      if (!RESUMABLE.includes(scan.status as string)) {
+        throw new Error(
+          `Scan is ${scan.status} — only failed or paused scans can be resumed.`
+        );
+      }
+      const st = scan.agentState as { messages?: unknown[] } | null;
+      if (!st || !Array.isArray(st.messages) || st.messages.length === 0) {
+        throw new Error(
+          "No checkpoint to resume from — this scan has no saved agent state."
+        );
+      }
+      await db.scan.update({
+        where: { id: scanId },
+        data: { status: "queued", currentStep: "queued for resume" },
+      });
+      targetTenantId = scan.tenantId;
+    });
+    await enqueueScan(scanId, targetTenantId, { resume: true });
+  } catch (err) {
+    // If we flipped to queued but couldn't enqueue, don't strand it.
+    if (targetTenantId) {
+      await run((db) =>
+        db.scan.update({ where: { id: scanId }, data: { status: "failed" } })
+      ).catch(() => {});
+    }
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Could not resume the scan.",
+    };
+  }
+  revalidatePath(`/scans/${scanId}`);
+  revalidatePath("/scans");
+  revalidatePath("/operator/queue");
+  return { ok: true, message: "Resuming from the last checkpoint…" };
 }

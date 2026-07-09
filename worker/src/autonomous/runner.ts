@@ -193,8 +193,11 @@ export type AutonomousResult = {
   status: "completed" | "failed";
   spentCents: number;
   findings: { severity: string; title: string }[];
+  totalFindings: number;
   error?: string;
 };
+
+type Msg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
 
 export async function runAutonomousScan(opts: {
   prisma: PrismaClient;
@@ -208,6 +211,7 @@ export async function runAutonomousScan(opts: {
   maxTurns?: number;
   targetIp?: string;
   network?: string;
+  resume?: boolean; // continue a prior run from its saved checkpoint
 }): Promise<AutonomousResult> {
   const { prisma, scanId, tenantId, targetUrl, virtualKey } = opts;
   const model = opts.model ?? "vaptbooster-default";
@@ -215,7 +219,35 @@ export async function runAutonomousScan(opts: {
   const budgetCents = opts.budgetCents;
   const host = new URL(targetUrl).hostname;
 
-  const events: { ts: string; actor: string; level: string; msg: string }[] = [];
+  // Resume: reload the prior conversation, event log, and spend so we continue
+  // from the checkpoint instead of restarting (which would re-burn the client's
+  // tokens). Falls back to a fresh start if there's no checkpoint.
+  let resumedMessages: Msg[] | null = null;
+  let startTurn = 0;
+  let priorEvents: { ts: string; actor: string; level: string; msg: string }[] = [];
+  let priorSpentCents = 0;
+  if (opts.resume) {
+    // Raw SQL (not the typed client): the worker's generated client predates
+    // these columns, matching how agentLog is already read/written here.
+    try {
+      const rows = await prisma.$queryRawUnsafe<
+        { agentState: unknown; agentLog: unknown; spentUsdCents: number }[]
+      >('SELECT "agentState", "agentLog", "spentUsdCents" FROM scans WHERE id = $1', scanId);
+      const row = rows[0];
+      const st = row?.agentState as { messages?: unknown; turn?: number } | null;
+      if (st && Array.isArray(st.messages) && st.messages.length) {
+        resumedMessages = st.messages as Msg[];
+        startTurn = typeof st.turn === "number" ? st.turn : 0;
+        priorEvents = (row?.agentLog as typeof priorEvents) ?? [];
+        priorSpentCents = Number(row?.spentUsdCents ?? 0);
+      }
+    } catch {
+      /* no checkpoint → fresh start */
+    }
+  }
+
+  const events: { ts: string; actor: string; level: string; msg: string }[] =
+    priorEvents.length ? [...priorEvents] : [];
   const log = async (actor: string, level: string, msg: string) => {
     events.push({ ts: new Date().toISOString(), actor, level, msg });
     await prisma
@@ -224,7 +256,7 @@ export async function runAutonomousScan(opts: {
   };
 
   const findings: { severity: string; title: string }[] = [];
-  let spentCents = 0;
+  let spentCents = priorSpentCents;
 
   // Resolve target IPv4s for the egress allowlist (IPv6 blocked in the sandbox).
   let ips: string[];
@@ -242,7 +274,7 @@ export async function runAutonomousScan(opts: {
       where: { id: scanId },
       data: { status: ScanStatus.failed, completedAt: new Date(), currentStep: msg, progress: 100 },
     });
-    return { status: "failed", spentCents: 0, findings: [], error: msg };
+    return { status: "failed", spentCents: 0, findings: [], totalFindings: 0, error: msg };
   }
 
   // Launch the egress-locked sandbox.
@@ -259,7 +291,7 @@ export async function runAutonomousScan(opts: {
       where: { id: scanId },
       data: { status: ScanStatus.failed, completedAt: new Date(), currentStep: msg, progress: 100 },
     });
-    return { status: "failed", spentCents: 0, findings: [], error: msg };
+    return { status: "failed", spentCents: 0, findings: [], totalFindings: 0, error: msg };
   }
 
   await log("system", "info", `autonomous agent · sandbox ${cid.slice(0, 12)} · egress-locked → ${ips.join(", ")}`);
@@ -274,10 +306,21 @@ export async function runAutonomousScan(opts: {
       baseURL: LITELLM_URL,
       defaultHeaders: { "x-litellm-metadata": JSON.stringify({ tenant_id: tenantId, scan_id: scanId, operation: "autonomous" }) },
     });
-    const skillsText = await loadSkillsFromDb(prisma);
-    await log("system", "info", `loaded ${skillsText.split("## Skill:").length - 1} skill(s) from the catalog`);
+    let messages: Msg[];
+    if (resumedMessages) {
+      // Continue the exact prior conversation — no re-recon, no re-billing.
+      messages = resumedMessages;
+      const prior = await prisma.finding.count({ where: { scanId } }).catch(() => 0);
+      await log(
+        "system",
+        "info",
+        `resuming from turn ${startTurn} · $${(priorSpentCents / 100).toFixed(2)} already spent · ${prior} prior finding(s)`
+      );
+    } else {
+      const skillsText = await loadSkillsFromDb(prisma);
+      await log("system", "info", `loaded ${skillsText.split("## Skill:").length - 1} skill(s) from the catalog`);
 
-    const system = `You are VAPTBOOSTER's autonomous penetration-testing agent. You operate a shell INSIDE an egress-locked sandbox that can reach ONLY the authorized target: ${targetUrl}. Tools available in the box: curl, python3 (with requests), jq, openssl, standard unix tools.
+      const system = `You are VAPTBOOSTER's autonomous penetration-testing agent. You operate a shell INSIDE an egress-locked sandbox that can reach ONLY the authorized target: ${targetUrl}. Tools available in the box: curl, python3 (with requests), jq, openssl, standard unix tools.
 
 Conduct a thorough, professional, AUTHORIZED penetration test of the target and report every confirmed vulnerability.
 
@@ -293,12 +336,13 @@ Use bash to run commands, report_finding for confirmed issues, finish to end.
 === SKILLS (your playbooks — authored by the operator) ===
 ${skillsText}`;
 
-    const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-      { role: "system", content: system },
-      { role: "user", content: `Target: ${targetUrl}. Begin the authorized penetration test.` },
-    ];
+      messages = [
+        { role: "system", content: system },
+        { role: "user", content: `Target: ${targetUrl}. Begin the authorized penetration test.` },
+      ];
+    }
 
-    for (let turn = 0; turn < maxTurns; turn++) {
+    for (let turn = startTurn; turn < maxTurns; turn++) {
       if (spentCents >= budgetCents) {
         await log("system", "warn", `budget reached ($${(spentCents / 100).toFixed(2)}) — stopping`);
         break;
@@ -377,6 +421,16 @@ ${skillsText}`;
         }
         messages.push({ role: "tool", tool_call_id: tc.id, content: result.slice(0, 8000) });
       }
+      // Checkpoint the conversation so a failed/paused scan can be resumed
+      // from here instead of restarting (which re-burns the client's tokens).
+      // Raw SQL — the worker's generated client predates this column.
+      await prisma
+        .$executeRawUnsafe(
+          'UPDATE scans SET "agentState" = $1::jsonb WHERE id = $2',
+          JSON.stringify({ messages, turn: turn + 1 }),
+          scanId
+        )
+        .catch(() => {});
       if (finished) break;
     }
   } catch (e) {
@@ -388,6 +442,10 @@ ${skillsText}`;
     await docker(["rm", "-f", cid], 30000);
     await log("system", "info", `sandbox ${cid.slice(0, 12)} destroyed (ephemeral)`);
   }
+
+  const totalFindings = await prisma.finding
+    .count({ where: { scanId } })
+    .catch(() => findings.length);
 
   await prisma.scan.update({
     where: { id: scanId },
@@ -405,6 +463,7 @@ ${skillsText}`;
     status: terminal === ScanStatus.completed ? "completed" : "failed",
     spentCents,
     findings,
+    totalFindings,
     error: failMsg ?? undefined,
   };
 }
@@ -414,60 +473,87 @@ ${skillsText}`;
 // =============================================================
 async function main() {
   const prisma = new PrismaClient();
-  const slug = process.argv[2];
-  const targetUrl = process.argv[3];
-  if (!slug || !targetUrl) {
-    console.error("usage: runner.ts <tenantSlug> <targetUrl> [--budget=10] [--model=…] [--target-ip=IP] [--network=NET]");
-    process.exit(1);
-  }
   const budgetUsd = parseFloat(arg("budget", "10")!);
   const model = arg("model", "vaptbooster-default")!;
   const maxTurns = parseInt(arg("max-turns", "80")!, 10);
   const network = arg("network");
   const targetIpArg = arg("target-ip");
+  const resumeId = arg("resume"); // continue an existing scan from its checkpoint
 
-  // --- Authorization gate: the target must be a VERIFIED scope target ---
-  const tenant = await prisma.tenant.findUnique({ where: { slug } });
-  if (!tenant) throw new Error(`tenant not found: ${slug}`);
-  const target = await prisma.scopeTarget.findFirst({ where: { tenantId: tenant.id, value: targetUrl } });
-  if (!target) throw new Error(`'${targetUrl}' is not in ${slug}'s scope — add + verify it first.`);
-  if (!target.verifiedAt) throw new Error(`'${targetUrl}' is NOT verified — authorization required before active testing.`);
-  const operator = await prisma.user.findFirst({ where: { role: "operator" } });
-  const virtualKey = await loadVirtualKey(prisma, tenant.id);
+  let scanId: string;
+  let tenantId: string;
+  let targetUrl: string;
+  let fallbackLocation: string;
+
+  if (resumeId) {
+    // --- Resume: reuse the existing scan (already authorized when created) ---
+    const scan = await prisma.scan.findUnique({
+      where: { id: resumeId },
+      include: { target: true },
+    });
+    if (!scan) throw new Error(`scan not found: ${resumeId}`);
+    scanId = scan.id;
+    tenantId = scan.tenantId;
+    targetUrl = scan.target?.value ?? scan.targetValue;
+    fallbackLocation = scan.targetValue;
+    await prisma.scan.update({ where: { id: scanId }, data: { status: ScanStatus.running } });
+    console.log(`resuming scan ${scanId} · watch http://localhost:3000/scans/${scanId}`);
+  } else {
+    const slug = process.argv[2];
+    const targetArg = process.argv[3];
+    if (!slug || !targetArg) {
+      console.error("usage: runner.ts <tenantSlug> <targetUrl> [--budget=10] [--model=…] [--target-ip=IP] [--network=NET]");
+      console.error("   or: runner.ts --resume=<scanId> [--budget=…]");
+      process.exit(1);
+    }
+    // --- Authorization gate: the target must be a VERIFIED scope target ---
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) throw new Error(`tenant not found: ${slug}`);
+    const target = await prisma.scopeTarget.findFirst({ where: { tenantId: tenant.id, value: targetArg } });
+    if (!target) throw new Error(`'${targetArg}' is not in ${slug}'s scope — add + verify it first.`);
+    if (!target.verifiedAt) throw new Error(`'${targetArg}' is NOT verified — authorization required before active testing.`);
+    const operator = await prisma.user.findFirst({ where: { role: "operator" } });
+    const scan = await prisma.scan.create({
+      data: {
+        tenantId: tenant.id,
+        targetId: target.id,
+        targetValue: target.value,
+        status: ScanStatus.running,
+        requesterId: operator?.id,
+        approverId: operator?.id,
+        approvedAt: new Date(),
+        startedAt: new Date(),
+        notes: "Autonomous agent run (CLI)",
+        currentStep: "launching sandbox",
+        progress: 5,
+      },
+    });
+    scanId = scan.id;
+    tenantId = tenant.id;
+    targetUrl = targetArg;
+    fallbackLocation = target.value;
+    console.log(`scan ${scan.id} · watch http://localhost:3000/scans/${scan.id}`);
+  }
+
+  const virtualKey = await loadVirtualKey(prisma, tenantId);
   if (!virtualKey) throw new Error("no LiteLLM virtual key for tenant — provision one first.");
-
-  const scan = await prisma.scan.create({
-    data: {
-      tenantId: tenant.id,
-      targetId: target.id,
-      targetValue: target.value,
-      status: ScanStatus.running,
-      requesterId: operator?.id,
-      approverId: operator?.id,
-      approvedAt: new Date(),
-      startedAt: new Date(),
-      notes: "Autonomous agent run (CLI)",
-      currentStep: "launching sandbox",
-      progress: 5,
-    },
-  });
-  console.log(`scan ${scan.id} · watch http://localhost:3000/scans/${scan.id}`);
 
   const result = await runAutonomousScan({
     prisma,
-    scanId: scan.id,
-    tenantId: tenant.id,
+    scanId,
+    tenantId,
     targetUrl,
-    fallbackLocation: target.value,
+    fallbackLocation,
     virtualKey,
     budgetCents: Math.round(budgetUsd * 100),
     model,
     maxTurns,
     targetIp: targetIpArg,
     network,
+    resume: !!resumeId,
   });
 
-  console.log(`\n=== ${result.status} · $${(result.spentCents / 100).toFixed(4)} · ${result.findings.length} findings ===`);
+  console.log(`\n=== ${result.status} · $${(result.spentCents / 100).toFixed(4)} · ${result.totalFindings} findings ===`);
   for (const f of result.findings) console.log(`  [${f.severity.toUpperCase()}] ${f.title}`);
   await prisma.$disconnect();
 }

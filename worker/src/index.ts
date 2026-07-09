@@ -44,7 +44,7 @@ const QUEUE_NAME = "scans";
 // Process one scan from start to finish. Stage 1 runs real,
 // read-only reconnaissance via the recon agent (worker/src/recon).
 // =============================================================
-async function processScan(job: Job<{ scanId: string; tenantId: string; active?: boolean }>) {
+async function processScan(job: Job<{ scanId: string; tenantId: string; active?: boolean; resume?: boolean }>) {
   const { scanId, tenantId, active } = job.data;
   const log = logger.child({ scanId, tenantId });
 
@@ -93,16 +93,18 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
   // a real virtual key (so it's gated on !SIMULATE) and Docker access in this
   // container (socket mount + docker CLI + the sandbox image on the host).
   if (process.env.AGENT_MODE === "autonomous" && !SIMULATE) {
+    const resume = job.data.resume === true;
     await prisma.scan.update({
       where: { id: scanId },
       data: {
         status: ScanStatus.running,
-        startedAt: new Date(),
         progress: 5,
-        currentStep: "launching autonomous agent",
+        currentStep: resume ? "resuming autonomous agent" : "launching autonomous agent",
+        // Preserve the original start time when resuming.
+        ...(resume ? {} : { startedAt: new Date() }),
       },
     });
-    log.info("autonomous_agent_start");
+    log.info({ resume }, "autonomous_agent_start");
     const result = await runAutonomousScan({
       prisma,
       scanId,
@@ -112,6 +114,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
       virtualKey,
       budgetCents: scan.ceilingUsdCents,
       model: "vaptbooster-default",
+      resume,
     });
     if (result.status === "completed") {
       await prisma.tenantBudget
@@ -119,15 +122,15 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
         .catch(() => {});
       await notifyScanRequester(
         scanId,
-        result.findings.length > 0 ? "finding_critical" : "scan_completed",
-        `Scan completed — ${result.findings.length} finding${result.findings.length === 1 ? "" : "s"}`,
+        result.totalFindings > 0 ? "finding_critical" : "scan_completed",
+        `Scan completed — ${result.totalFindings} finding${result.totalFindings === 1 ? "" : "s"}`,
         scan.targetValue
       );
     } else {
       await notifyScanRequester(scanId, "scan_failed", "Scan failed", result.error ?? "autonomous agent error");
     }
     log.info(
-      { status: result.status, findings: result.findings.length, spentUsdCents: result.spentCents },
+      { status: result.status, findings: result.totalFindings, spentUsdCents: result.spentCents, resume },
       "autonomous_agent_done"
     );
     return;

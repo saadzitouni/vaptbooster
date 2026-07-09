@@ -189,6 +189,7 @@ model Scan {
   progress      Int     @default(0) // 0..100
   currentStep   String?
   agentLog      Json?   // live transcript of the agent's steps + AI tool-calls
+  agentState    Json?   // resumable checkpoint: the agent's LLM conversation + turn
 
   // Cost tracking — running totals per scan
   spentUsdCents  Int     @default(0) // store cents to avoid float drift

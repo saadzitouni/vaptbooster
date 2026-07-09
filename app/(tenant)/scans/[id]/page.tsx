@@ -11,6 +11,7 @@ import {
 import { requireTenantId } from "@/lib/session";
 import { getTenantScanDetail } from "@/lib/queries";
 import { LiveRefresh } from "@/components/operator/LiveRefresh";
+import { ResumeScanButton } from "@/components/scans/ResumeScanButton";
 import { timeAgo, hexId } from "@/lib/utils";
 
 export default async function ScanDetailPage({
@@ -22,11 +23,16 @@ export default async function ScanDetailPage({
   const tenantId = await requireTenantId();
   const detail = await getTenantScanDetail(tenantId, id);
   if (!detail) notFound();
-  const { scan, findings, agentLog } = detail;
+  const { scan, findings, agentLog, resumable } = detail;
   const totalFindings = Object.values(scan.findingCounts).reduce(
     (a, b) => a + b,
     0
   );
+  const canResume =
+    resumable &&
+    (scan.status === "failed" ||
+      scan.status === "paused_ceiling" ||
+      scan.status === "cancelled");
 
   // Real agent transcript (live). Each line is a step the agent took or a
   // decision the AI made during the scan.
@@ -72,6 +78,7 @@ export default async function ScanDetailPage({
         actions={
           <>
             <ScanStatusBadge status={scan.status} />
+            {canResume && <ResumeScanButton scanId={scan.id} />}
             {scan.status === "running" && (
               <Button variant="danger" size="md">
                 Cancel

@@ -40,11 +40,16 @@ if (process.env.NODE_ENV !== "production") {
 export async function enqueueScan(
   scanId: string,
   tenantId: string,
-  active: boolean = process.env.SCAN_ACTIVE !== "false"
+  opts: { active?: boolean; resume?: boolean } = {}
 ) {
+  const active = opts.active ?? process.env.SCAN_ACTIVE !== "false";
+  const resume = opts.resume ?? false;
+  // Resuming re-runs the SAME scanId — clear any prior (failed) job with that
+  // jobId first, otherwise BullMQ dedupes it and the resume never runs.
+  if (resume) await scanQueue.remove(scanId).catch(() => {});
   await scanQueue.add(
     "scan",
-    { scanId, tenantId, active },
+    { scanId, tenantId, active, resume },
     { jobId: scanId, removeOnComplete: 200, removeOnFail: 200 }
   );
 }
