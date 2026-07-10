@@ -1,16 +1,26 @@
-import { ComingSoon } from "@/components/ui/ComingSoon";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { requireOperator } from "@/lib/session";
+import { getOperatorFindings } from "@/lib/queries";
+import { OperatorFindingsConsole } from "@/components/operator/OperatorFindingsConsole";
 
-export default function OperatorFindingsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function OperatorFindingsPage() {
+  await requireOperator();
+  const findings = await getOperatorFindings();
+
   return (
-    <ComingSoon
-      eyebrow="// operator · cross-tenant"
-      title={
-        <>
-          Findings <span className="em">firehose</span>
-        </>
-      }
-      lede="Every finding produced across all tenants — triage, deduplicate, and spot systemic issues."
-      note="The cross-tenant findings view isn't implemented in the current build. Once wired, operators review and validate agent-produced findings from all workspaces here."
-    />
+    <>
+      <PageHeader
+        eyebrow="// operator · cross-tenant"
+        title={
+          <>
+            Findings <span className="em">firehose</span>
+          </>
+        }
+        lede="Every finding across all tenants. Triage, confirm, and let the AI assistant assess each one against the scan's captured evidence."
+      />
+      <OperatorFindingsConsole findings={findings} />
+    </>
   );
 }

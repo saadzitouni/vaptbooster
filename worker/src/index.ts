@@ -129,6 +129,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     } else {
       await notifyScanRequester(scanId, "scan_failed", "Scan failed", result.error ?? "autonomous agent error");
     }
+    await notifyOperatorsOfScanFindings(scanId, scan.target.value);
     log.info(
       { status: result.status, findings: result.totalFindings, spentUsdCents: result.spentCents, resume },
       "autonomous_agent_done"
@@ -323,6 +324,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     `Scan completed — ${totalVulns} finding${totalVulns === 1 ? "" : "s"}`,
     scan.targetValue
   );
+  await notifyOperatorsOfScanFindings(scanId, scan.targetValue);
 }
 
 // Persist Stage 2 passive findings (real severities, CWE, remediation).
@@ -455,6 +457,48 @@ async function notifyScanRequester(scanId: string, type: string, title: string, 
     );
   } catch (err) {
     logger.warn({ err: (err as Error).message }, "notify_failed");
+  }
+}
+
+// Notify every operator about every finding a scan produced (in-app bell).
+// Operators triage cross-tenant, so they see all of them. Raw SQL — the
+// worker's generated client predates the notifications table.
+async function notifyOperatorsOfScanFindings(scanId: string, targetValue: string) {
+  try {
+    const operators = await prisma.user.findMany({
+      where: { role: "operator" },
+      select: { id: true },
+    });
+    if (!operators.length) return;
+    const findings = await prisma.finding.findMany({
+      where: { scanId },
+      select: { id: true, tenantId: true, severity: true, title: true },
+    });
+    if (!findings.length) return;
+    const scan = await prisma.scan.findUnique({
+      where: { id: scanId },
+      select: { tenant: { select: { name: true } } },
+    });
+    const tenantName = scan?.tenant?.name ?? "tenant";
+
+    for (const f of findings) {
+      const sev = String(f.severity);
+      const type = sev === "critical" || sev === "high" ? "finding_critical" : "finding";
+      for (const op of operators) {
+        await prisma.$executeRawUnsafe(
+          'INSERT INTO notifications (id, "userId", "tenantId", type, title, body, link, "createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7, now())',
+          randomUUID(),
+          op.id,
+          f.tenantId,
+          type,
+          `[${sev.toUpperCase()}] ${f.title}`.slice(0, 200),
+          `${tenantName} · ${targetValue}`.slice(0, 500),
+          `/operator/findings/${f.id}`
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "notify_operators_failed");
   }
 }
 

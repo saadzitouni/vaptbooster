@@ -626,6 +626,127 @@ export async function getOperatorImportableScans(
   });
 }
 
+// -------------------------------------------------------------
+// Operator findings console (cross-tenant) + AI triage
+// -------------------------------------------------------------
+export type OperatorFindingRow = {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  scanId: string;
+  title: string;
+  summary: string;
+  severity: Severity;
+  status: string;
+  cwe: string | null;
+  location: string;
+  discoveredAt: string;
+  reproducedBy: string | null;
+  hasAiTriage: boolean;
+  aiVerdict: string | null;
+};
+
+export type AiTriage = {
+  verdict?: string; // true_positive | likely | false_positive
+  confidence?: string; // high | medium | low
+  severityAssessment?: string;
+  suggestedSeverity?: string;
+  exploitability?: string;
+  howToConfirm?: string;
+  remediation?: string;
+  recommendedAction?: string; // confirm | downgrade | duplicate | dismiss
+  rationale?: string;
+  model?: string;
+  analyzedAt?: string;
+};
+
+export async function getOperatorFindings(): Promise<OperatorFindingRow[]> {
+  return withOperator(async (db) => {
+    const rows = await db.finding.findMany({
+      orderBy: [{ discoveredAt: "desc" }],
+      include: { tenant: { select: { name: true } } },
+    });
+    return rows.map((f) => {
+      const triage = (f as { aiTriage?: AiTriage | null }).aiTriage ?? null;
+      return {
+        id: f.id,
+        tenantId: f.tenantId,
+        tenantName: f.tenant?.name ?? "",
+        scanId: f.scanId,
+        title: f.title,
+        summary: f.summary,
+        severity: f.severity as Severity,
+        status: f.status as string,
+        cwe: f.cwe ?? null,
+        location: f.location,
+        discoveredAt: f.discoveredAt.toISOString(),
+        reproducedBy: f.reproducedBy ?? null,
+        hasAiTriage: !!triage,
+        aiVerdict: triage?.verdict ?? null,
+      };
+    });
+  });
+}
+
+export type OperatorFindingDetail = {
+  finding: {
+    id: string;
+    tenantId: string;
+    tenantName: string;
+    scanId: string;
+    title: string;
+    summary: string;
+    severity: Severity;
+    status: string;
+    cwe: string | null;
+    location: string;
+    remediation: string | null;
+    reproducedBy: string | null;
+    reproducedAt: string | null;
+    discoveredAt: string;
+    targetValue: string;
+  };
+  evidence: AgentLogEntry[];
+  aiTriage: AiTriage | null;
+};
+
+export async function getOperatorFindingDetail(
+  id: string
+): Promise<OperatorFindingDetail | null> {
+  return withOperator(async (db) => {
+    const f = await db.finding.findUnique({
+      where: { id },
+      include: {
+        tenant: { select: { name: true } },
+        scan: { select: { targetValue: true, agentLog: true } },
+      },
+    });
+    if (!f) return null;
+    return {
+      finding: {
+        id: f.id,
+        tenantId: f.tenantId,
+        tenantName: f.tenant?.name ?? "",
+        scanId: f.scanId,
+        title: f.title,
+        summary: f.summary,
+        severity: f.severity as Severity,
+        status: f.status as string,
+        cwe: f.cwe ?? null,
+        location: f.location,
+        remediation: f.remediation ?? null,
+        reproducedBy: f.reproducedBy ?? null,
+        reproducedAt: f.reproducedAt ? f.reproducedAt.toISOString() : null,
+        discoveredAt: f.discoveredAt.toISOString(),
+        targetValue: f.scan?.targetValue ?? "",
+      },
+      evidence:
+        ((f.scan as { agentLog?: unknown } | null)?.agentLog as AgentLogEntry[] | null) ?? [],
+      aiTriage: (f as { aiTriage?: AiTriage | null }).aiTriage ?? null,
+    };
+  });
+}
+
 export { ROOT_DOMAIN };
 
 // -------------------------------------------------------------

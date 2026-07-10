@@ -244,6 +244,10 @@ model Finding {
   reproducedAt   DateTime?
   evidenceUrl    String?  // S3 key
 
+  // AI triage assistant output (verdict/confidence/remediation), cached so the
+  // operator view doesn't re-bill an LLM call on every render.
+  aiTriage       Json?
+
   // Remediation
   remediation    String?  @db.Text
   fixedAt        DateTime?
