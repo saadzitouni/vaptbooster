@@ -43,7 +43,7 @@ function arg(name: string, def?: string): string | undefined {
 // The bridge: the agent's methodology comes from the operator-editable skill
 // catalog in the DB. Edit a skill in /operator/skills → the next scan uses it.
 //
-// Loading is on-demand (Strix-style): the STRATEGIC methodology is injected in
+// Loading is on-demand: the STRATEGIC methodology is injected in
 // full (it's the always-on operating procedure), while TACTICAL playbooks are
 // advertised only as a lean one-line catalog. The agent pulls a full tactical
 // body into context via the load_skill tool right before it tests that class —

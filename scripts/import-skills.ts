@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 // =============================================================
 // import-skills.ts — load the markdown skill playbooks under
-// prisma/strix-skills/ into the DB agent skill catalog.
+// prisma/vaptbooster-skills/ into the DB agent skill catalog.
 //
 // Each .md becomes a skill: methodology/ → strategic (injected every scan),
 // everything else → tactical (advertised in the catalog, pulled on demand via
@@ -29,12 +29,12 @@ if (!process.env.DATABASE_URL) {
   } catch {}
 }
 
-const SKILLS_DIR = join(process.cwd(), "prisma", "strix-skills");
+const SKILLS_DIR = join(process.cwd(), "prisma", "vaptbooster-skills");
 
 // Legacy shallow skills (from the first seed) superseded by the imported set.
-// NOTE: only keys with NO Strix equivalent — the overlapping keys
+// NOTE: only keys with NO imported equivalent — the overlapping keys
 // (sql_injection, xss, ssrf, business_logic) are re-imported with the deeper
-// Strix content under the SAME key, so they must stay enabled.
+// content under the SAME key, so they must stay enabled.
 const LEGACY_KEYS = [
   "web_app_testing", "recon_mapping", "authn_session", "access_control",
   "injection_advanced", "file_and_path", "api_and_graphql", "info_disclosure_headers",
