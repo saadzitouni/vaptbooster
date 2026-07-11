@@ -41,24 +41,69 @@ function arg(name: string, def?: string): string | undefined {
 }
 
 // The bridge: the agent's methodology comes from the operator-editable skill
-// catalog in the DB (enabled strategic + tactical skills, current published
-// version). Edit a skill in /operator/skills → the next scan uses it. No deploy.
-async function loadSkillsFromDb(prisma: PrismaClient): Promise<string> {
+// catalog in the DB. Edit a skill in /operator/skills → the next scan uses it.
+//
+// Loading is on-demand (Strix-style): the STRATEGIC methodology is injected in
+// full (it's the always-on operating procedure), while TACTICAL playbooks are
+// advertised only as a lean one-line catalog. The agent pulls a full tactical
+// body into context via the load_skill tool right before it tests that class —
+// keeping the per-turn prompt small while letting the playbooks be deep.
+
+async function loadStrategicSkills(prisma: PrismaClient): Promise<string> {
   const skills = await prisma.skill.findMany({
-    where: { enabled: true, altitude: { in: ["strategic", "tactical"] } },
+    where: { enabled: true, altitude: "strategic" },
     include: { currentVersion: true },
-    orderBy: { altitude: "desc" }, // strategic (methodology) first
   });
   const parts: string[] = [];
   for (const s of skills) {
     const v = s.currentVersion;
-    if (!v || !v.systemPrompt?.trim()) continue;
-    parts.push(
-      `## Skill: ${v.name} [${s.key}] — ${s.altitude} (v${v.versionNumber})\n` +
-        `${v.description}\n\nWhen to use: ${v.triggers}\n\n${v.systemPrompt}`
-    );
+    if (!v?.systemPrompt?.trim()) continue;
+    parts.push(`## ${v.name} [${s.key}]\n${v.description}\n\n${v.systemPrompt}`);
   }
-  return parts.length ? parts.join("\n\n---\n\n") : "(no enabled skills in the catalog)";
+  return parts.length ? parts.join("\n\n---\n\n") : "(no strategic methodology skill enabled)";
+}
+
+async function loadTacticalCatalog(
+  prisma: PrismaClient
+): Promise<{ index: string; count: number }> {
+  const skills = await prisma.skill.findMany({
+    where: { enabled: true, altitude: "tactical" },
+    include: { currentVersion: true },
+    orderBy: { category: "asc" },
+  });
+  const lines: string[] = [];
+  for (const s of skills) {
+    const v = s.currentVersion;
+    if (!v?.systemPrompt?.trim()) continue;
+    lines.push(`- ${s.key} — ${v.name}: ${v.description}`);
+  }
+  return { index: lines.join("\n") || "(none)", count: lines.length };
+}
+
+// Full body of specific skills — returned inline by the load_skill tool.
+async function loadSkillBodies(prisma: PrismaClient, keys: string[]): Promise<string> {
+  const uniq = [...new Set(keys.map((k) => String(k).trim()).filter(Boolean))].slice(0, 5);
+  if (!uniq.length) return "load_skill: provide at least one skill key from the catalog.";
+  const skills = await prisma.skill.findMany({
+    where: { key: { in: uniq }, enabled: true },
+    include: { currentVersion: true },
+  });
+  const parts: string[] = [];
+  for (const s of skills) {
+    const v = s.currentVersion;
+    if (!v?.systemPrompt?.trim()) continue;
+    let body = `## Skill: ${v.name} [${s.key}]\n${v.description}\n\n${v.systemPrompt}`;
+    const ps = v.payloadSets as unknown;
+    if (ps && typeof ps === "object" && Object.keys(ps as object).length) {
+      body += `\n\nPayload sets: ${JSON.stringify(ps).slice(0, 2500)}`;
+    }
+    parts.push(body);
+  }
+  const found = new Set(skills.map((s) => s.key));
+  const missing = uniq.filter((k) => !found.has(k));
+  let out = parts.join("\n\n---\n\n") || "load_skill: no enabled skills matched those keys.";
+  if (missing.length) out += `\n\n(not found or disabled: ${missing.join(", ")})`;
+  return out;
 }
 
 async function loadVirtualKey(prisma: PrismaClient, tenantId: string): Promise<string | null> {
@@ -98,6 +143,26 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           timeout_seconds: { type: "number", description: "Max seconds (default 60, max 180)." },
         },
         required: ["command"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "load_skill",
+      description:
+        "Pull the full playbook (techniques, payloads, bypass ladders, validation steps) for one or more tactical skills BY KEY, right before you test that vulnerability class. Returns the skill bodies inline. Work from the full playbook, not the one-line catalog summary.",
+      parameters: {
+        type: "object",
+        properties: {
+          keys: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              'Skill keys from the TACTICAL PLAYBOOK CATALOG, e.g. ["sql_injection","access_control"]. Max 5.',
+          },
+        },
+        required: ["keys"],
       },
     },
   },
@@ -317,8 +382,13 @@ export async function runAutonomousScan(opts: {
         `resuming from turn ${startTurn} · $${(priorSpentCents / 100).toFixed(2)} already spent · ${prior} prior finding(s)`
       );
     } else {
-      const skillsText = await loadSkillsFromDb(prisma);
-      await log("system", "info", `loaded ${skillsText.split("## Skill:").length - 1} skill(s) from the catalog`);
+      const methodology = await loadStrategicSkills(prisma);
+      const catalog = await loadTacticalCatalog(prisma);
+      await log(
+        "system",
+        "info",
+        `methodology loaded · ${catalog.count} tactical playbook(s) available on demand (load_skill)`
+      );
 
       const system = `You are VAPTBOOSTER's autonomous penetration-testing agent. You operate a shell INSIDE an egress-locked sandbox that can reach ONLY the authorized target: ${targetUrl}. The box carries a full command-line web-pentest arsenal (see TOOLING below).
 
@@ -340,10 +410,14 @@ RULES:
 - XSS: xsser (+ manual context-aware payloads) · Command injection: commix · CMS: wpscan (WordPress) · TLS/WAF: sslscan, wafw00f
 CONSTRAINTS: the sandbox has NO internet except the target — anything that fetches remote data (nuclei -update, OOB/interactsh callbacks, subdomain enumeration, wpscan --api-token) will NOT work; everything needed is baked in. Keep ALL usage NON-DESTRUCTIVE: detection/enumeration only — no brute-force account lockouts, no data destruction, no DoS. Tools are fast but noisy; choose deliberately rather than scanning blindly.
 
-Use bash to run commands, report_finding for confirmed issues, finish to end.
+Use bash to run commands, load_skill to pull a tactical playbook before testing that class, report_finding for confirmed issues, finish to end.
 
-=== SKILLS (your playbooks — authored by the operator) ===
-${skillsText}`;
+=== METHODOLOGY (your operating procedure — always in effect) ===
+${methodology}
+
+=== TACTICAL PLAYBOOK CATALOG ===
+Each entry below is a DEEP playbook (techniques, payloads, bypass ladders, validation, false positives). Before testing a vulnerability class, call load_skill with its key(s) to pull the full playbook into context — do NOT rely on the one-line summary alone. Cover every category in the methodology's checklist.
+${catalog.index}`;
 
       messages = [
         { role: "system", content: system },
@@ -403,6 +477,10 @@ ${skillsText}`;
           const combined = (r.out + (r.err ? `\n[stderr] ${r.err}` : "")).slice(0, 4000);
           await log("tool", r.code === 0 ? "ok" : "warn", `exit ${r.code} · ${combined.split("\n")[0]?.slice(0, 160) ?? ""}`);
           result = `exit_code=${r.code}\n${combined || "(no output)"}`;
+        } else if (tc.function.name === "load_skill") {
+          const keys = Array.isArray(a.keys) ? (a.keys as unknown[]).map(String) : [];
+          result = await loadSkillBodies(prisma, keys);
+          await log("system", "info", `↓ loaded playbook(s): ${keys.slice(0, 5).join(", ") || "(none)"}`);
         } else if (tc.function.name === "report_finding") {
           const sev = String(a.severity ?? "info");
           await prisma.finding.create({
@@ -428,7 +506,10 @@ ${skillsText}`;
         } else {
           result = "unknown_tool";
         }
-        messages.push({ role: "tool", tool_call_id: tc.id, content: result.slice(0, 8000) });
+        // load_skill returns deep playbooks — give them more room than a normal
+        // tool result (trimContext shrinks them once they age out anyway).
+        const cap = tc.function.name === "load_skill" ? 20000 : 8000;
+        messages.push({ role: "tool", tool_call_id: tc.id, content: result.slice(0, cap) });
       }
       // Checkpoint the conversation so a failed/paused scan can be resumed
       // from here instead of restarting (which re-burns the client's tokens).
