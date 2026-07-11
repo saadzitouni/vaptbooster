@@ -205,12 +205,17 @@ function costCents(u: OpenAI.CompletionUsage | undefined, model: string): number
 // rate limits). Shrink the bulky output of OLD tool calls while preserving the
 // system prompt, the task, the recent turns, and all of the agent's reasoning.
 function trimContext(messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]) {
-  const KEEP_RECENT = 14;
+  // The agent re-sends the whole transcript every turn, and input tokens are
+  // ~90% of scan cost. Shrink OLD tool outputs (command results + loaded skill
+  // bodies) hard — the agent already acted on them; the full text is dead
+  // weight that gets re-billed as input on every subsequent turn. Keep only a
+  // short recent window at full size.
+  const KEEP_RECENT = 6;
   const end = messages.length - KEEP_RECENT;
   for (let i = 2; i < end; i++) {
     const m = messages[i];
-    if (m.role === "tool" && typeof m.content === "string" && m.content.length > 220) {
-      m.content = m.content.slice(0, 200) + " …[older output trimmed]";
+    if (m.role === "tool" && typeof m.content === "string" && m.content.length > 180) {
+      m.content = m.content.slice(0, 160) + " …[trimmed]";
     }
   }
 }
@@ -419,8 +424,15 @@ ${methodology}
 Each entry below is a DEEP playbook (techniques, payloads, bypass ladders, validation, false positives). Before testing a vulnerability class, call load_skill with its key(s) to pull the full playbook into context — do NOT rely on the one-line summary alone. Cover every category in the methodology's checklist.
 ${catalog.index}`;
 
+      // Mark the (static) system prompt for prompt caching — Anthropic/OpenRouter
+      // bill cached input at ~0.1×, so re-sending it every turn is nearly free.
+      // Harmless if the provider ignores the hint.
+      const sysMsg = {
+        role: "system",
+        content: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      } as unknown as Msg;
       messages = [
-        { role: "system", content: system },
+        sysMsg,
         { role: "user", content: `Target: ${targetUrl}. Begin the authorized penetration test.` },
       ];
     }
@@ -474,7 +486,7 @@ ${catalog.index}`;
           const t = Math.min(Number(a.timeout_seconds ?? 60), 180) * 1000;
           await log("claude", "info", `$ ${cmd.slice(0, 300)}`);
           const r = await docker(["exec", cid, "sh", "-c", cmd], t + 5000);
-          const combined = (r.out + (r.err ? `\n[stderr] ${r.err}` : "")).slice(0, 4000);
+          const combined = (r.out + (r.err ? `\n[stderr] ${r.err}` : "")).slice(0, 2500);
           await log("tool", r.code === 0 ? "ok" : "warn", `exit ${r.code} · ${combined.split("\n")[0]?.slice(0, 160) ?? ""}`);
           result = `exit_code=${r.code}\n${combined || "(no output)"}`;
         } else if (tc.function.name === "load_skill") {

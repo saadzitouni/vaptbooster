@@ -112,7 +112,13 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
       targetUrl: scan.target.value,
       fallbackLocation: scan.targetValue,
       virtualKey,
-      budgetCents: scan.ceilingUsdCents,
+      // Cap the autonomous run so cost can't silently climb (input tokens
+      // dominate). Default $6; raise via AGENT_MAX_BUDGET_USD. Still bounded by
+      // the scan's own ceiling.
+      budgetCents: Math.min(
+        scan.ceilingUsdCents,
+        Math.round((Number(process.env.AGENT_MAX_BUDGET_USD) || 6) * 100)
+      ),
       model: "vaptbooster-default",
       resume,
     });
