@@ -14,7 +14,7 @@ export default async function ScansPage() {
   return (
     <>
       <PageHeader
-        eyebrow="// audits"
+        eyebrow="audits"
         title={
           <>
             All <span className="em">scans</span>.

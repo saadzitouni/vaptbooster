@@ -12,7 +12,7 @@ export default async function OperatorFindingsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="// operator · cross-tenant"
+        eyebrow="operator"
         title={
           <>
             Findings <span className="em">firehose</span>

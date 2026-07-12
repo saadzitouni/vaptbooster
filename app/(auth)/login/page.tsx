@@ -14,7 +14,7 @@ export default function LoginPage() {
         </Link>
 
         <div>
-          <div className="eyebrow mb-4">// closed beta · cohort #001</div>
+          <div className="eyebrow mb-4">closed beta · cohort #001</div>
           <h1 className="text-[42px] leading-tight tracking-tight2 font-medium">
             Welcome <span className="em">back</span>.<br />
             Let's go <span className="em">hunting</span>.

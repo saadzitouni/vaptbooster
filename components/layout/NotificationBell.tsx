@@ -67,7 +67,7 @@ export function NotificationBell({ items, unread }: { items: NotifItem[]; unread
       {open && (
         <div className="absolute right-0 mt-2 w-80 max-h-[70vh] overflow-y-auto bg-ink border border-line rounded-lg shadow-xl z-50">
           <div className="px-4 py-3 border-b border-line flex items-center justify-between sticky top-0 bg-ink">
-            <span className="eyebrow">// notifications</span>
+            <span className="eyebrow">notifications</span>
             <Link href="/notifications" onClick={() => setOpen(false)} className="text-2xs font-mono text-fg-mute hover:text-fg">
               view all →
             </Link>

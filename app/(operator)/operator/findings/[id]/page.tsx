@@ -41,7 +41,7 @@ export default async function OperatorFindingDetailPage({
       </div>
 
       <PageHeader
-        eyebrow={`// ${finding.tenantName} · ${finding.targetValue}`}
+        eyebrow={`${finding.tenantName} · ${finding.targetValue}`}
         title={<>{finding.title}</>}
         lede={
           <span className="font-mono text-[13px]">
@@ -62,7 +62,7 @@ export default async function OperatorFindingDetailPage({
         {/* Evidence */}
         <div className="lg:col-span-3 space-y-5">
           <Panel>
-            <PanelHeader eyebrow="// agent evidence" title={<>What the agent <span className="em-sm">found</span></>} />
+            <PanelHeader eyebrow="agent evidence" title={<>What the agent <span className="em-sm">found</span></>} />
             <div className="p-5">
               <p className="text-[13px] text-fg-2 leading-relaxed whitespace-pre-wrap">
                 {finding.summary}
@@ -72,7 +72,7 @@ export default async function OperatorFindingDetailPage({
 
           <Panel>
             <PanelHeader
-              eyebrow="// scan activity"
+              eyebrow="scan activity"
               title={<>Captured <span className="em-sm">log</span></>}
               right={<span className="text-2xs text-fg-mute font-mono">{evLines.length} lines</span>}
             />

@@ -13,7 +13,7 @@ export default async function ReportsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="// tenant"
+        eyebrow="tenant"
         title={
           <>
             Reports &amp; <span className="em">exports</span>

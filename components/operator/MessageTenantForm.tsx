@@ -18,7 +18,7 @@ export function MessageTenantForm({ tenantId }: { tenantId: string }) {
 
       {open && (
         <Panel className="p-5 mt-3">
-          <div className="eyebrow mb-3">// send a message to this tenant&apos;s members</div>
+          <div className="eyebrow mb-3">send a message to this tenant&apos;s members</div>
           <form action={action} className="flex flex-col gap-3 max-w-xl">
             <input type="hidden" name="tenantId" value={tenantId} />
             <Field label="Subject" required>

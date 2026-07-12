@@ -48,15 +48,11 @@ export function Sidebar({
           <span className="text-fg-mute text-[13px]">/</span>
           <span className="text-fg-2 text-[13px]">vaptbooster</span>
         </Link>
-        <div className="mt-3 text-2xs text-fg-mute font-mono">
-          {variant === "operator" ? (
-            <span>
-              <span className="text-warn">operator</span> · cross-tenant
-            </span>
-          ) : (
-            tenantName && <span>tenant: <span className="text-fg-2">{tenantName}</span></span>
-          )}
-        </div>
+        {variant !== "operator" && tenantName && (
+          <div className="mt-3 text-2xs text-fg-mute font-mono">
+            tenant: <span className="text-fg-2">{tenantName}</span>
+          </div>
+        )}
       </div>
 
       {/* Nav items */}

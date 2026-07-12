@@ -21,7 +21,7 @@ export function ComingSoon({
       <PageHeader eyebrow={eyebrow} title={title} lede={lede} />
       <Panel className="px-6 py-16">
         <div className="max-w-md mx-auto text-center">
-          <div className="eyebrow mb-4">// not yet wired</div>
+          <div className="eyebrow mb-4">not yet wired</div>
           <h3 className="text-[20px] font-medium">
             On the <span className="em">roadmap</span>
           </h3>

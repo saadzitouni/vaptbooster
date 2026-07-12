@@ -22,7 +22,7 @@ export default async function ScopePage() {
   return (
     <>
       <PageHeader
-        eyebrow="// tenant"
+        eyebrow="tenant"
         title={
           <>
             Engagement <span className="em">scope</span>

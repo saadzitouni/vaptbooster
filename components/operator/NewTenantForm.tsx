@@ -18,7 +18,7 @@ export function NewTenantForm() {
 
       {open && (
         <Panel className="p-6 mt-4">
-          <div className="eyebrow mb-4">// onboard a client tenant</div>
+          <div className="eyebrow mb-4">onboard a client tenant</div>
           <form action={action} className="grid gap-4 max-w-2xl">
             <div className="grid sm:grid-cols-2 gap-3">
               <Field label="Company name" required>

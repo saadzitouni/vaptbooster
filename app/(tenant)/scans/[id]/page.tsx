@@ -130,7 +130,7 @@ export default async function ScanDetailPage({
         {/* Live log */}
         <Panel className="lg:col-span-3">
           <PanelHeader
-            eyebrow="// stream"
+            eyebrow="stream"
             title={
               <>
                 Live <span className="em-sm">log</span>
@@ -192,7 +192,7 @@ export default async function ScanDetailPage({
         {/* Findings list (compact) */}
         <Panel className="lg:col-span-2">
           <PanelHeader
-            eyebrow={`// ${findings.length} findings`}
+            eyebrow={`${findings.length} findings`}
             title={
               <>
                 Discovered <span className="em-sm">so far</span>

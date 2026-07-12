@@ -61,7 +61,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
       </div>
 
       <PageHeader
-        eyebrow={`// ${skill.altitude} · ${skill.category}`}
+        eyebrow={`${skill.altitude} · ${skill.category}`}
         title={
           <>
             <span className="em">{v.name}</span>
@@ -102,7 +102,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
       {/* ----- Metrics strip (read-only context) ----- */}
       <Panel className="mb-8">
         <PanelHeader
-          eyebrow="// last 30 days"
+          eyebrow="last 30 days"
           title={
             <>
               How this skill is <span className="em-sm">performing</span>
@@ -143,7 +143,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
       <div className="flex flex-col gap-6">
         {/* ===== 1. IDENTITY ===== */}
         <Panel>
-          <PanelHeader eyebrow="// 01" title={<>Identity</>} />
+          <PanelHeader eyebrow="01" title={<>Identity</>} />
           <div className="p-6 grid md:grid-cols-2 gap-5">
             <div>
               <Label>Display name</Label>
@@ -174,7 +174,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
         {/* ===== 2. TRIGGERS ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 02"
+            eyebrow="02"
             title={
               <>
                 When to <span className="em-sm">use</span>, when to{" "}
@@ -209,7 +209,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
         {/* ===== 3. PROMPTS ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 03"
+            eyebrow="03"
             title={
               <>
                 LLM <span className="em-sm">prompts</span>
@@ -251,7 +251,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
         {/* ===== 4. PAYLOADS ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 04"
+            eyebrow="04"
             title={
               <>
                 Payload <span className="em-sm">sets</span>
@@ -277,7 +277,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
         {/* ===== 5. PARAMETERS ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 05"
+            eyebrow="05"
             title={
               <>
                 Runtime <span className="em-sm">parameters</span>
@@ -329,7 +329,7 @@ export function SkillEditor({ skill }: { skill: MockSkill }) {
         {/* ===== 6. SAFETY ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 06"
+            eyebrow="06"
             title={
               <>
                 Safety <span className="em-sm">guards</span>

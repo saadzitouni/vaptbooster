@@ -70,7 +70,7 @@ export function AgentConfigEditor({ config }: { config: MockAgentConfig }) {
       </div>
 
       <PageHeader
-        eyebrow="// super-admin · agent"
+        eyebrow="super-admin · agent"
         title={
           <>
             Agent <span className="em">behavior</span>.
@@ -90,7 +90,7 @@ export function AgentConfigEditor({ config }: { config: MockAgentConfig }) {
         {/* ===== 1. COST + EXECUTION ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 01"
+            eyebrow="01"
             title={
               <>
                 Cost &amp; <span className="em-sm">execution</span>
@@ -163,7 +163,7 @@ export function AgentConfigEditor({ config }: { config: MockAgentConfig }) {
         {/* ===== 2. AGGRESSIVENESS ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 02"
+            eyebrow="02"
             title={
               <>
                 Hunt <span className="em-sm">aggressiveness</span>
@@ -219,7 +219,7 @@ export function AgentConfigEditor({ config }: { config: MockAgentConfig }) {
         {/* ===== 3. DEFAULT MODELS ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 03"
+            eyebrow="03"
             title={
               <>
                 Default <span className="em-sm">models</span>
@@ -253,7 +253,7 @@ export function AgentConfigEditor({ config }: { config: MockAgentConfig }) {
         {/* ===== 4. PLANNER PROMPT ===== */}
         <Panel>
           <PanelHeader
-            eyebrow="// 04"
+            eyebrow="04"
             title={
               <>
                 Planner <span className="em-sm">system prompt</span>

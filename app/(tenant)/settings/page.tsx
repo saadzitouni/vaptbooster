@@ -3,7 +3,7 @@ import { ComingSoon } from "@/components/ui/ComingSoon";
 export default function SettingsPage() {
   return (
     <ComingSoon
-      eyebrow="// tenant"
+      eyebrow="tenant"
       title={
         <>
           Workspace <span className="em">settings</span>

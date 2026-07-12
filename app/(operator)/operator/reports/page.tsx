@@ -16,7 +16,7 @@ export default async function OperatorReportsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="// operator"
+        eyebrow="operator"
         title={
           <>
             Reports &amp; <span className="em">exports</span>

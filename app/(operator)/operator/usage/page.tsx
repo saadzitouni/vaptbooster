@@ -45,7 +45,7 @@ export default async function OperatorUsagePage() {
   return (
     <>
       <PageHeader
-        eyebrow="// operator · usage & cost"
+        eyebrow="operator · usage & cost"
         title={
           <>
             Where the <span className="em">money</span> goes.
@@ -95,7 +95,7 @@ export default async function OperatorUsagePage() {
       {/* Cost trend chart */}
       <Panel className="mt-8" accent>
         <PanelHeader
-          eyebrow="// last 14 days"
+          eyebrow="last 14 days"
           title={
             <>
               Daily <span className="em-sm">revenue vs cost</span>
@@ -149,7 +149,7 @@ export default async function OperatorUsagePage() {
       {/* Per-tenant breakdown — the table operator scans every morning */}
       <Panel className="mt-5">
         <PanelHeader
-          eyebrow="// per tenant"
+          eyebrow="per tenant"
           title={
             <>
               Margin <span className="em-sm">breakdown</span>
@@ -240,7 +240,7 @@ export default async function OperatorUsagePage() {
 
       {/* Helpful inline guide for the operator */}
       <div className="mt-6 p-5 border border-line rounded-lg bg-ink-2 text-2xs text-fg-mute font-mono leading-relaxed">
-        <div className="eyebrow mb-3">// what to do</div>
+        <div className="eyebrow mb-3">what to do</div>
         <div className="grid md:grid-cols-3 gap-4">
           <div>
             <div className="text-fg mb-1">healthy ( ≥ 70% )</div>

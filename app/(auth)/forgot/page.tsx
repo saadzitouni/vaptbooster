@@ -15,7 +15,7 @@ export default function ForgotPasswordPage() {
         </Link>
 
         <div>
-          <div className="eyebrow mb-4">// account recovery</div>
+          <div className="eyebrow mb-4">account recovery</div>
           <h1 className="text-[42px] leading-tight tracking-tight2 font-medium">
             Lost your <span className="em">way</span>?<br />
             We'll get you <span className="em">back in</span>.

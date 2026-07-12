@@ -70,7 +70,7 @@ export function SkillCatalog({ skills }: { skills: MockSkill[] }) {
   return (
     <>
       <PageHeader
-        eyebrow="// super-admin · skills"
+        eyebrow="super-admin · skills"
         title={
           <>
             Skill <span className="em">catalog</span>.
@@ -165,7 +165,7 @@ export function SkillCatalog({ skills }: { skills: MockSkill[] }) {
         return (
           <Panel className="mt-5" key={altitude}>
             <PanelHeader
-              eyebrow={`// ${ALTITUDE_LABELS[altitude]} · ${list.length}`}
+              eyebrow={`${ALTITUDE_LABELS[altitude]} · ${list.length}`}
               title={
                 <>
                   <span className="capitalize">{ALTITUDE_LABELS[altitude]}</span>{" "}

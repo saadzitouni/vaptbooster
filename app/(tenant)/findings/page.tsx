@@ -10,7 +10,7 @@ export default async function FindingsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="// vulnerabilities"
+        eyebrow="vulnerabilities"
         title={
           <>
             All <span className="em">findings</span>.

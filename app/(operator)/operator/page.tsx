@@ -19,7 +19,7 @@ export default async function OperatorDashboardPage() {
     <>
       <LiveRefresh />
       <PageHeader
-        eyebrow="// operator console"
+        eyebrow="operator console"
         title={
           <>
             <span className="em">Cross-tenant</span> overview.
@@ -66,7 +66,7 @@ export default async function OperatorDashboardPage() {
         {/* Approval queue */}
         <Panel className="lg:col-span-3" accent>
           <PanelHeader
-            eyebrow="// action required"
+            eyebrow="action required"
             title={
               <>
                 Awaiting <span className="em-sm">approval</span>
@@ -129,7 +129,7 @@ export default async function OperatorDashboardPage() {
         {/* Tenants list */}
         <Panel className="lg:col-span-2">
           <PanelHeader
-            eyebrow={`// ${tenants.length} tenants`}
+            eyebrow={`${tenants.length} tenants`}
             title={
               <>
                 Active <span className="em-sm">workspaces</span>
@@ -174,7 +174,7 @@ export default async function OperatorDashboardPage() {
       {/* Running scans strip */}
       <Panel className="mt-5">
         <PanelHeader
-          eyebrow="// in progress"
+          eyebrow="in progress"
           title={
             <>
               Scans <span className="em-sm">running</span> right now

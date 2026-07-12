@@ -32,7 +32,7 @@ export default async function OperatorTenantDetailPage({
       </div>
 
       <PageHeader
-        eyebrow="// operator · tenant"
+        eyebrow="operator · tenant"
         title={
           <>
             {tenant.name}
@@ -75,14 +75,14 @@ export default async function OperatorTenantDetailPage({
 
       {/* Scope + verification */}
       <div className="mb-10">
-        <div className="eyebrow mb-4">// engagement scope — verify = authorization to test</div>
+        <div className="eyebrow mb-4">engagement scope — verify = authorization to test</div>
         <OperatorScopePanel tenantId={tenant.id} targets={targets} />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-5">
         {/* Users */}
         <Panel>
-          <PanelHeader eyebrow={`// ${users.length} users`} title={<>Members</>} />
+          <PanelHeader eyebrow={`${users.length} users`} title={<>Members</>} />
           <ul>
             {users.map((u) => (
               <li key={u.id} className="px-5 py-3 border-t border-line first:border-t-0 flex items-center justify-between gap-3">
@@ -96,7 +96,7 @@ export default async function OperatorTenantDetailPage({
 
         {/* Recent scans */}
         <Panel>
-          <PanelHeader eyebrow="// recent scans" title={<>Activity</>} />
+          <PanelHeader eyebrow="recent scans" title={<>Activity</>} />
           <ul>
             {scans.map((s) => (
               <li key={s.id} className="px-5 py-3 border-t border-line first:border-t-0 flex items-center justify-between gap-3">

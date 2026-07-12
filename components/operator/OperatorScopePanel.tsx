@@ -35,7 +35,7 @@ export function OperatorScopePanel({ tenantId, targets }: { tenantId: string; ta
     <div className="flex flex-col gap-6">
       {/* Add target */}
       <Panel className="p-5">
-        <div className="eyebrow mb-3">// add a target to this tenant&apos;s scope</div>
+        <div className="eyebrow mb-3">add a target to this tenant&apos;s scope</div>
         <form action={addAction} className="flex flex-col gap-3 max-w-2xl">
           <input type="hidden" name="tenantId" value={tenantId} />
           <div className="grid grid-cols-[140px_1fr] gap-3">
@@ -75,7 +75,7 @@ export function OperatorScopePanel({ tenantId, targets }: { tenantId: string; ta
 
       {/* Targets */}
       <div className="flex flex-col gap-2">
-        <div className="eyebrow">// in-scope assets ({targets.length})</div>
+        <div className="eyebrow">in-scope assets ({targets.length})</div>
         {targets.length === 0 ? (
           <Panel className="px-6 py-10">
             <p className="text-center text-fg-2 text-[14px]">No targets yet.</p>

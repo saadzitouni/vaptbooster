@@ -3,7 +3,7 @@ import { ComingSoon } from "@/components/ui/ComingSoon";
 export default function OperatorQueuePage() {
   return (
     <ComingSoon
-      eyebrow="// operator · cross-tenant"
+      eyebrow="operator"
       title={
         <>
           Scan <span className="em">queue</span>

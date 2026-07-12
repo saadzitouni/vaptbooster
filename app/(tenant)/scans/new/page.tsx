@@ -22,7 +22,7 @@ export default async function NewScanPage() {
       </div>
 
       <PageHeader
-        eyebrow="// tenant · scans"
+        eyebrow="tenant · scans"
         title={
           <>
             Request a <span className="em">scan</span>
@@ -34,7 +34,7 @@ export default async function NewScanPage() {
       {verified.length === 0 ? (
         <Panel className="px-6 py-12">
           <div className="max-w-md mx-auto text-center">
-            <div className="eyebrow mb-3">// no verified scope</div>
+            <div className="eyebrow mb-3">no verified scope</div>
             <p className="text-fg-2 text-[14px]">
               You have no <span className="text-fg">verified</span> targets in
               scope yet. Add and verify ownership of a target under{" "}

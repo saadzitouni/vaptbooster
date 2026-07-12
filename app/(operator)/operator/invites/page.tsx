@@ -3,7 +3,7 @@ import { ComingSoon } from "@/components/ui/ComingSoon";
 export default function OperatorInvitesPage() {
   return (
     <ComingSoon
-      eyebrow="// operator · cross-tenant"
+      eyebrow="operator"
       title={
         <>
           Invitations <span className="em">&amp; access</span>

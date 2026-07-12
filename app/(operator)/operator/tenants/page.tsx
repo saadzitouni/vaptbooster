@@ -19,7 +19,7 @@ export default async function OperatorTenantsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="// operator · cross-tenant"
+        eyebrow="operator"
         title={
           <>
             Tenant <span className="em">manager</span>
@@ -47,7 +47,7 @@ export default async function OperatorTenantsPage() {
 
       <Panel>
         <PanelHeader
-          eyebrow={`// ${TENANTS.length} workspaces`}
+          eyebrow={`${TENANTS.length} workspaces`}
           title={
             <>
               All <span className="em-sm">workspaces</span>

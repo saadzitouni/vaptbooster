@@ -17,7 +17,7 @@ export function ReportList({
     return (
       <Panel className="px-6 py-16">
         <div className="max-w-md mx-auto text-center">
-          <div className="eyebrow mb-3">// no reports yet</div>
+          <div className="eyebrow mb-3">no reports yet</div>
           <p className="text-fg-2 text-[14px] leading-relaxed">
             Create your first report to author a branded engagement deliverable —
             add findings, drop in a client logo, and export it to PDF.

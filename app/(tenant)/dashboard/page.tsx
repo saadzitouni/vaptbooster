@@ -103,7 +103,7 @@ export default async function DashboardPage() {
         {/* Live scan */}
         <Panel className="lg:col-span-3" accent>
           <PanelHeader
-            eyebrow="// in progress"
+            eyebrow="in progress"
             title={
               <>
                 Live <span className="em-sm">scan</span>
@@ -182,7 +182,7 @@ export default async function DashboardPage() {
           {pendingScans.length > 0 && (
             <Panel>
               <PanelHeader
-                eyebrow="// awaiting"
+                eyebrow="awaiting"
                 title={
                   <>
                     Pending <span className="em-sm">approval</span>
@@ -210,7 +210,7 @@ export default async function DashboardPage() {
 
           <Panel>
             <PanelHeader
-              eyebrow="// fresh"
+              eyebrow="fresh"
               title={
                 <>
                   Recent <span className="em-sm">findings</span>
