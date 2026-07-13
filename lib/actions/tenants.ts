@@ -129,19 +129,21 @@ export async function operatorSetScanLimit(
   return { ok: true, message: `Scan limit set to ${n}/period.` };
 }
 
-// Reset the billing period (usage back to 0, new 30-day window starting now).
+// Reset the SCAN quota (fresh allotment, new 30-day scan window starting now).
+// Deliberately does NOT touch currentPeriodStart, so cost/spend tracking is
+// preserved.
 export async function operatorResetTenantPeriod(tenantId: string): Promise<Result> {
   await requireOperator();
   try {
     await withOperator((db) =>
       db.tenantBudget.update({
         where: { tenantId },
-        data: { currentPeriodStart: new Date(), creditsUsedThisPeriod: 0 },
+        data: { scanPeriodStart: new Date(), creditsUsedThisPeriod: 0 },
       })
     );
   } catch {
     return { ok: false, message: "No budget on this tenant yet — set a plan first." };
   }
   revalTenant(tenantId);
-  return { ok: true, message: "Billing period reset — scan usage back to 0." };
+  return { ok: true, message: "Scan quota reset — usage back to 0 (cost tracking kept)." };
 }

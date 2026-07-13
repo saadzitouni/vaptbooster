@@ -33,20 +33,24 @@ export async function getPlanUsage(
   const included = budget?.monthlyCreditsIncluded ?? 10;
   const now = Date.now();
 
-  // Roll the period window forward to the one that contains 'now'.
-  let periodStart = budget?.currentPeriodStart
-    ? budget.currentPeriodStart.getTime()
-    : now;
+  // Scan-quota window — independent of the billing/cost window
+  // (currentPeriodStart). Falls back to the billing window, then a rolling 30d.
+  let periodStart =
+    budget?.scanPeriodStart?.getTime() ??
+    budget?.currentPeriodStart?.getTime() ??
+    now;
   let advanced = false;
   while (periodStart + PERIOD_MS <= now) {
     periodStart += PERIOD_MS;
     advanced = true;
   }
   if (advanced && budget) {
+    // Roll ONLY the scan window — never touch currentPeriodStart, or cost
+    // tracking (which scopes to it) would be wiped.
     await db.tenantBudget
       .update({
         where: { tenantId },
-        data: { currentPeriodStart: new Date(periodStart), creditsUsedThisPeriod: 0 },
+        data: { scanPeriodStart: new Date(periodStart), creditsUsedThisPeriod: 0 },
       })
       .catch(() => {});
   }
