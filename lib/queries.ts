@@ -16,6 +16,8 @@ import {
   type ReportDoc,
   type ReportListItem,
 } from "@/lib/report";
+import { getPlanUsage, type PlanUsage } from "@/lib/usage";
+import { planPriceCents } from "@/lib/plans";
 
 // -------------------------------------------------------------
 // helpers
@@ -105,6 +107,10 @@ const SCAN_INCLUDE = {
 // TENANT-SCOPED (RLS: only this tenant's rows)
 // =============================================================
 
+export async function getTenantUsage(tenantId: string): Promise<PlanUsage> {
+  return withTenant(tenantId, (db) => getPlanUsage(db, tenantId));
+}
+
 export async function getTenantDashboard(tenantId: string) {
   return withTenant(tenantId, async (db) => {
     const [tenant, scopeCount, scanRows, findingRows] = await Promise.all([
@@ -117,6 +123,8 @@ export async function getTenantDashboard(tenantId: string) {
       db.finding.findMany({ orderBy: { discoveredAt: "desc" } }),
     ]);
 
+    const usage = await getPlanUsage(db, tenantId);
+
     return {
       tenant: {
         id: tenant?.id ?? tenantId,
@@ -126,6 +134,7 @@ export async function getTenantDashboard(tenantId: string) {
         country: tenant?.country ?? "",
         scopeCount,
       },
+      usage,
       scans: (scanRows as ScanRow[]).map(mapScan),
       findings: (findingRows as FindingRow[]).map(mapFinding),
     };
@@ -211,11 +220,6 @@ export async function getTenantFindings(tenantId: string): Promise<Finding[]> {
 // =============================================================
 
 const ROOT_DOMAIN = "vaptbooster.pwntrol.com";
-const PLAN_PRICE_CENTS: Record<string, number> = {
-  solo: 49000,
-  team: 199000,
-  enterprise: 500000,
-};
 
 export type OperatorTenantView = Tenant & {
   plan: string;
@@ -355,7 +359,9 @@ export async function getOperatorTenantDetail(tenantId: string) {
       db.user.findMany({ where: { tenantId }, orderBy: { createdAt: "asc" } }),
       db.scan.findMany({ where: { tenantId }, orderBy: { requestedAt: "desc" }, take: 10 }),
     ]);
+    const usage = await getPlanUsage(db, tenantId);
     return {
+      usage,
       tenant: {
         id: tenant.id,
         slug: tenant.slug,
@@ -784,7 +790,7 @@ export async function getOperatorUsage() {
 
     const summaries: MockUsageSummary[] = tenants.map((t) => {
       const plan = t.budget?.plan ?? "solo";
-      const revenue = PLAN_PRICE_CENTS[plan] ?? 49000;
+      const revenue = planPriceCents(plan);
       const periodStart = (
         t.budget?.currentPeriodStart ?? new Date(nowMs - 30 * dayMs)
       ).getTime();

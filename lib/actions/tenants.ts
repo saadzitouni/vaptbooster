@@ -6,10 +6,9 @@ import bcrypt from "bcryptjs";
 import { PlanTier, UserRole } from "@prisma/client";
 import { withOperator } from "@/lib/db";
 import { requireOperator } from "@/lib/session";
+import { PLAN_KEYS, planScans, planLabel, type PlanKey } from "@/lib/plans";
 
 type Result = { ok: boolean; message: string };
-
-const CREDITS: Record<string, number> = { solo: 10, team: 50, enterprise: 200 };
 
 const schema = z.object({
   slug: z
@@ -56,7 +55,7 @@ export async function createTenant(_prev: Result | null, formData: FormData): Pr
           budget: {
             create: {
               plan: plan as PlanTier,
-              monthlyCreditsIncluded: CREDITS[plan] ?? 10,
+              monthlyCreditsIncluded: planScans(plan),
               monthlyHardCeilingUsdCents: 50000,
               currentPeriodStart: new Date(),
             },
@@ -73,4 +72,76 @@ export async function createTenant(_prev: Result | null, formData: FormData): Pr
   revalidatePath("/operator/tenants");
   revalidatePath("/operator");
   return { ok: true, message: `Tenant '${slug}' created with member ${memberEmail}. Provision its LiteLLM key next.` };
+}
+
+// -------------------------------------------------------------
+// Operator: plan & quota management for an existing tenant.
+// -------------------------------------------------------------
+function revalTenant(tenantId: string) {
+  revalidatePath(`/operator/tenants/${tenantId}`);
+  revalidatePath("/operator/tenants");
+  revalidatePath("/operator/usage");
+}
+
+// Change a tenant's plan — also sets the scan quota to the plan's default.
+export async function operatorSetTenantPlan(
+  tenantId: string,
+  plan: string
+): Promise<Result> {
+  await requireOperator();
+  if (!PLAN_KEYS.includes(plan as PlanKey)) return { ok: false, message: "Invalid plan." };
+  try {
+    await withOperator((db) =>
+      db.tenantBudget.upsert({
+        where: { tenantId },
+        update: { plan: plan as PlanTier, monthlyCreditsIncluded: planScans(plan) },
+        create: {
+          tenantId,
+          plan: plan as PlanTier,
+          monthlyCreditsIncluded: planScans(plan),
+          monthlyHardCeilingUsdCents: 50000,
+          currentPeriodStart: new Date(),
+        },
+      })
+    );
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : "Could not change plan." };
+  }
+  revalTenant(tenantId);
+  return { ok: true, message: `Plan set to ${planLabel(plan)} — ${planScans(plan)} scans/period.` };
+}
+
+// Override the scan quota (custom / one-off top-up) without changing the plan.
+export async function operatorSetScanLimit(
+  tenantId: string,
+  scans: number
+): Promise<Result> {
+  await requireOperator();
+  const n = Math.max(0, Math.min(100000, Math.floor(Number(scans) || 0)));
+  try {
+    await withOperator((db) =>
+      db.tenantBudget.update({ where: { tenantId }, data: { monthlyCreditsIncluded: n } })
+    );
+  } catch {
+    return { ok: false, message: "No budget on this tenant yet — set a plan first." };
+  }
+  revalTenant(tenantId);
+  return { ok: true, message: `Scan limit set to ${n}/period.` };
+}
+
+// Reset the billing period (usage back to 0, new 30-day window starting now).
+export async function operatorResetTenantPeriod(tenantId: string): Promise<Result> {
+  await requireOperator();
+  try {
+    await withOperator((db) =>
+      db.tenantBudget.update({
+        where: { tenantId },
+        data: { currentPeriodStart: new Date(), creditsUsedThisPeriod: 0 },
+      })
+    );
+  } catch {
+    return { ok: false, message: "No budget on this tenant yet — set a plan first." };
+  }
+  revalTenant(tenantId);
+  return { ok: true, message: "Billing period reset — scan usage back to 0." };
 }

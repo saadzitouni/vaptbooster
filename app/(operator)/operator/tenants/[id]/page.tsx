@@ -10,6 +10,7 @@ import { getOperatorTenantDetail, ROOT_DOMAIN } from "@/lib/queries";
 import { OperatorScopePanel } from "@/components/operator/OperatorScopePanel";
 import { ProvisionKeyButton } from "@/components/operator/ProvisionKeyButton";
 import { MessageTenantForm } from "@/components/operator/MessageTenantForm";
+import { PlanManager } from "@/components/operator/PlanManager";
 import { timeAgo } from "@/lib/utils";
 
 export default async function OperatorTenantDetailPage({
@@ -21,7 +22,7 @@ export default async function OperatorTenantDetailPage({
   const { id } = await params;
   const detail = await getOperatorTenantDetail(id);
   if (!detail) notFound();
-  const { tenant, targets, users, scans } = detail;
+  const { tenant, targets, users, scans, usage } = detail;
 
   return (
     <>
@@ -54,7 +55,12 @@ export default async function OperatorTenantDetailPage({
           value={tenant.hasKey ? "provisioned" : "missing"}
           tone={tenant.hasKey ? "ok" : "warn"}
         />
-        <Stat label="Credits used" value={`${tenant.creditsUsed}/${tenant.creditsIncluded}`} emphasis="serif" />
+        <Stat
+          label="Scans used"
+          value={`${usage.used}/${usage.included}`}
+          tone={usage.atLimit ? "crit" : "default"}
+          emphasis="serif"
+        />
         <Stat label="Spend · period" value={`$${(tenant.spendUsdCents / 100).toFixed(2)}`} emphasis="serif" />
       </div>
 
@@ -67,6 +73,17 @@ export default async function OperatorTenantDetailPage({
           <ProvisionKeyButton tenantId={tenant.id} />
         </Panel>
       )}
+
+      {/* Plan & quota */}
+      <div className="mb-8">
+        <PlanManager
+          tenantId={tenant.id}
+          plan={usage.plan}
+          used={usage.used}
+          included={usage.included}
+          resetsAt={usage.resetsAt}
+        />
+      </div>
 
       {/* Message the tenant */}
       <div className="mb-8">

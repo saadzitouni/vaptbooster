@@ -4,14 +4,18 @@ import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
 import { Field, Textarea } from "@/components/ui/Input";
 import { requireTenantId } from "@/lib/session";
-import { getTenantScope } from "@/lib/queries";
+import { getTenantScope, getTenantUsage } from "@/lib/queries";
 import { requestScan } from "@/lib/actions/scans";
 
 export default async function NewScanPage() {
   const tenantId = await requireTenantId();
-  const scope = await getTenantScope(tenantId);
+  const [scope, usage] = await Promise.all([
+    getTenantScope(tenantId),
+    getTenantUsage(tenantId),
+  ]);
   // Only verified targets are scannable (enforced in requestScan + the worker).
   const verified = scope.filter((s) => s.verifiedAt);
+  const resetDate = new Date(usage.resetsAt).toLocaleDateString("en-GB");
 
   return (
     <>
@@ -28,10 +32,23 @@ export default async function NewScanPage() {
             Request a <span className="em">scan</span>
           </>
         }
-        lede="Pick a verified target from your scope. The scan is queued for operator approval before it runs."
+        lede={`${usage.remaining} of ${usage.included} scans left this period on the ${usage.planLabel} plan · resets ${resetDate}.`}
       />
 
-      {verified.length === 0 ? (
+      {usage.atLimit ? (
+        <Panel className="px-6 py-12">
+          <div className="max-w-md mx-auto text-center">
+            <div className="eyebrow mb-3 text-crit">scan limit reached</div>
+            <p className="text-fg-2 text-[14px]">
+              You&apos;ve used all{" "}
+              <span className="text-fg">{usage.included}</span> scans on the{" "}
+              {usage.planLabel} plan for this period. Your quota resets on{" "}
+              <span className="text-fg">{resetDate}</span> — or contact us to
+              raise your plan.
+            </p>
+          </div>
+        </Panel>
+      ) : verified.length === 0 ? (
         <Panel className="px-6 py-12">
           <div className="max-w-md mx-auto text-center">
             <div className="eyebrow mb-3">no verified scope</div>

@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { withTenant, withOperator, type TxClient } from "@/lib/db";
 import { requireTenantUser, requireOperator } from "@/lib/session";
 import { enqueueScan } from "@/lib/queue";
+import { getPlanUsage } from "@/lib/usage";
 
 const requestScanSchema = z.object({
   targetId: z.string().min(1, "Choose a target in scope."),
@@ -44,6 +45,18 @@ export async function requestScan(formData: FormData) {
         "This target is not verified. Verify ownership under Scope before scanning it."
       );
     }
+
+    // Plan quota — hard block once the tenant has used all their scans this
+    // billing period. (Operators bypass: they don't go through requestScan.)
+    const usage = await getPlanUsage(db, tenantId);
+    if (usage.atLimit) {
+      throw new Error(
+        `Scan limit reached — ${usage.used}/${usage.included} scans used on the ${usage.planLabel} plan this period. Resets ${new Date(
+          usage.resetsAt
+        ).toLocaleDateString("en-GB")}. Contact us to raise your plan.`
+      );
+    }
+
     const scan = await db.scan.create({
       data: {
         tenantId,

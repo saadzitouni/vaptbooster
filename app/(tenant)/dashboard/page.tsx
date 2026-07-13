@@ -16,9 +16,10 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.tenantId) redirect("/login");
   const firstName = (session.user.name ?? "there").split(" ")[0];
-  const { tenant, scans, findings } = await getTenantDashboard(
+  const { tenant, usage, scans, findings } = await getTenantDashboard(
     session.user.tenantId
   );
+  const resetDate = new Date(usage.resetsAt).toLocaleDateString("en-GB");
 
   const runningScans = scans.filter((s) => s.status === "running");
   const pendingScans = scans.filter((s) => s.status === "pending_approval");
@@ -47,14 +48,18 @@ export default async function DashboardPage() {
           </>
         }
         actions={
-          <>
+          usage.atLimit ? (
+            <Button variant="line" disabled title={`Plan limit reached — resets ${resetDate}`}>
+              Scan limit reached ({usage.used}/{usage.included})
+            </Button>
+          ) : (
             <Link href="/scans/new">
               <Button variant="solid">
                 Request scan
                 <ArrowRight />
               </Button>
             </Link>
-          </>
+          )
         }
       />
 
@@ -89,11 +94,15 @@ export default async function DashboardPage() {
           }
         />
         <Stat
-          label="Total scans"
-          value={completedScans.length + runningScans.length}
-          tone="default"
+          label="Scans this period"
+          value={`${usage.used}/${usage.included}`}
+          tone={usage.atLimit ? "crit" : "default"}
           emphasis="serif"
-          change={`${completedScans.length} completed`}
+          change={
+            usage.atLimit
+              ? `Limit reached · resets ${resetDate}`
+              : `${usage.remaining} left · ${usage.planLabel} plan`
+          }
         />
       </div>
 
