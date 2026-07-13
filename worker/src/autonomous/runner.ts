@@ -424,15 +424,8 @@ ${methodology}
 Each entry below is a DEEP playbook (techniques, payloads, bypass ladders, validation, false positives). Before testing a vulnerability class, call load_skill with its key(s) to pull the full playbook into context — do NOT rely on the one-line summary alone. Cover every category in the methodology's checklist.
 ${catalog.index}`;
 
-      // Mark the (static) system prompt for prompt caching — Anthropic/OpenRouter
-      // bill cached input at ~0.1×, so re-sending it every turn is nearly free.
-      // Harmless if the provider ignores the hint.
-      const sysMsg = {
-        role: "system",
-        content: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      } as unknown as Msg;
       messages = [
-        sysMsg,
+        { role: "system", content: system },
         { role: "user", content: `Target: ${targetUrl}. Begin the authorized penetration test.` },
       ];
     }
