@@ -215,3 +215,96 @@ export async function resumeScan(
   revalidatePath("/operator/queue");
   return { ok: true, message: "Resuming from the last checkpoint…" };
 }
+
+// -------------------------------------------------------------
+// Retest — re-verify specific prior findings after the client has (allegedly)
+// fixed them. Launches a scoped autonomous regression scan that checks ONLY the
+// selected findings and marks each fixed / still-present. Courtesy re-check:
+// auto-queued (the target is already verified + the findings came from an
+// approved scan) and it does NOT consume a plan scan.
+// -------------------------------------------------------------
+export async function retestFindings(
+  findingIds: string[]
+): Promise<{ ok: boolean; message: string; scanId?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, message: "Not authenticated." };
+  const isOperator = session.user.role === "operator";
+  const userId = session.user.id;
+  const tenantId = session.user.tenantId ?? "";
+  if (!isOperator && !tenantId) return { ok: false, message: "Not authorized." };
+
+  const ids = [...new Set((findingIds ?? []).filter(Boolean))].slice(0, 50);
+  if (!ids.length) return { ok: false, message: "No findings selected to retest." };
+
+  const run = <T>(fn: (db: TxClient) => Promise<T>) =>
+    isOperator ? withOperator(fn) : withTenant(tenantId, fn);
+
+  let newScanId = "";
+  let outTenant = "";
+  try {
+    await run(async (db) => {
+      const findings = await db.finding.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          tenantId: true,
+          scan: { select: { targetId: true, targetValue: true } },
+        },
+      });
+      if (!findings.length) throw new Error("Findings not found.");
+      // Retest is per-target: all selected findings must share one target.
+      const targetIds = new Set(findings.map((f) => f.scan?.targetId).filter(Boolean));
+      if (targetIds.size !== 1) {
+        throw new Error("Select findings from a single target to retest together.");
+      }
+      const first = findings[0];
+      const targetId = first.scan!.targetId;
+      const targetValue = first.scan!.targetValue;
+      const findingTenant = first.tenantId;
+
+      // Defense in depth — the target must still be in scope + verified.
+      const target = await db.scopeTarget.findFirst({ where: { id: targetId } });
+      if (!target) throw new Error("Target is no longer in scope.");
+      if (!target.verifiedAt) {
+        throw new Error("Target is not verified — verify it under Scope before retesting.");
+      }
+
+      const scan = await db.scan.create({
+        data: {
+          tenantId: findingTenant,
+          targetId,
+          targetValue,
+          status: "queued",
+          kind: "retest",
+          retestFindingIds: findings.map((f) => f.id),
+          requesterId: userId,
+          approverId: userId,
+          approvedAt: new Date(),
+          notes: `Retest of ${findings.length} prior finding(s)`,
+        },
+      });
+      newScanId = scan.id;
+      outTenant = findingTenant;
+    });
+    await enqueueScan(newScanId, outTenant);
+  } catch (err) {
+    // Don't strand a half-created retest scan.
+    if (newScanId && outTenant) {
+      await run((db) =>
+        db.scan.update({ where: { id: newScanId }, data: { status: "failed" } })
+      ).catch(() => {});
+    }
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Could not start the retest.",
+    };
+  }
+  revalidatePath("/scans");
+  revalidatePath("/findings");
+  revalidatePath("/operator/findings");
+  return {
+    ok: true,
+    message: "Retest started — re-verifying the selected finding(s).",
+    scanId: newScanId,
+  };
+}

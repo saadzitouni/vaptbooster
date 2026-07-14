@@ -60,6 +60,8 @@ export async function getPlanUsage(
       tenantId,
       requestedAt: { gte: new Date(periodStart) },
       NOT: { status: ScanStatus.cancelled },
+      // Retests are a courtesy re-verification — they don't count against quota.
+      kind: { not: "retest" },
     },
   });
 

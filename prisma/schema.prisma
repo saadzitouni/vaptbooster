@@ -199,6 +199,11 @@ model Scan {
   // BullMQ job id (so we can cancel/inspect)
   jobId     String?
 
+  // Assessment = full pentest (starts fresh, primed with prior-scan knowledge).
+  // Retest = re-verify specific prior findings only (regression check).
+  kind             String   @default("assessment")
+  retestFindingIds String[] @default([]) // Finding ids being re-verified (kind=retest)
+
   findings     Finding[]
   reports      Report[]
   usageRecords UsageRecord[]

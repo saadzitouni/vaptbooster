@@ -12,6 +12,7 @@ import { requireTenantId } from "@/lib/session";
 import { getTenantScanDetail } from "@/lib/queries";
 import { LiveRefresh } from "@/components/operator/LiveRefresh";
 import { ResumeScanButton } from "@/components/scans/ResumeScanButton";
+import { RetestButton } from "@/components/scans/RetestButton";
 import { timeAgo, hexId } from "@/lib/utils";
 
 export default async function ScanDetailPage({
@@ -44,6 +45,8 @@ export default async function ScanDetailPage({
   }));
 
   const isActive = scan.status === "running" || scan.status === "queued";
+  // Non-info findings can be re-tested after the client fixes them.
+  const retestable = findings.filter((f) => f.severity !== "info").map((f) => f.id);
 
   return (
     <>
@@ -83,6 +86,14 @@ export default async function ScanDetailPage({
               <Button variant="danger" size="md">
                 Cancel
               </Button>
+            )}
+            {scan.status === "completed" && retestable.length > 0 && (
+              <RetestButton
+                findingIds={retestable}
+                label={`Retest ${retestable.length} finding${retestable.length === 1 ? "" : "s"}`}
+                redirectTo="/scans/"
+                size="md"
+              />
             )}
             {scan.status === "completed" && (
               <Button variant="solid" size="md">

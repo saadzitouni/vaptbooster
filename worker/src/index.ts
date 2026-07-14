@@ -87,24 +87,69 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     return;
   }
 
-  // ---- Autonomous skilled-agent mode (opt-in: AGENT_MODE=autonomous) ----
-  // Runs the LLM agent that drives the egress-locked sandbox using the DB skill
-  // catalog, instead of the deterministic recon→passive→active pipeline. Needs
-  // a real virtual key (so it's gated on !SIMULATE) and Docker access in this
-  // container (socket mount + docker CLI + the sandbox image on the host).
-  if (process.env.AGENT_MODE === "autonomous" && !SIMULATE) {
+  // Retest scans carry kind="retest" + the finding ids to re-verify. Read via
+  // raw SQL — the worker's generated client predates these columns.
+  let scanKind = "assessment";
+  let retestIds: string[] = [];
+  try {
+    const rows = await prisma.$queryRawUnsafe<
+      { kind: string | null; retestFindingIds: string[] | null }[]
+    >('SELECT kind, "retestFindingIds" FROM scans WHERE id = $1', scanId);
+    if (rows[0]) {
+      scanKind = rows[0].kind ?? "assessment";
+      retestIds = rows[0].retestFindingIds ?? [];
+    }
+  } catch {
+    /* columns absent on an un-migrated DB — treat as a normal assessment */
+  }
+  const isRetest = scanKind === "retest";
+
+  // ---- Autonomous skilled-agent mode ----
+  // Opt-in via AGENT_MODE=autonomous, OR forced for a retest (re-verification is
+  // inherently agent-driven). Drives the egress-locked sandbox using the DB
+  // skill catalog. Needs a real virtual key (gated on !SIMULATE) and Docker
+  // access in this container (socket mount + docker CLI + the sandbox image).
+  if ((process.env.AGENT_MODE === "autonomous" || isRetest) && !SIMULATE) {
     const resume = job.data.resume === true;
     await prisma.scan.update({
       where: { id: scanId },
       data: {
         status: ScanStatus.running,
         progress: 5,
-        currentStep: resume ? "resuming autonomous agent" : "launching autonomous agent",
+        currentStep: resume
+          ? "resuming autonomous agent"
+          : isRetest
+          ? "re-testing prior findings"
+          : "launching autonomous agent",
         // Preserve the original start time when resuming.
         ...(resume ? {} : { startedAt: new Date() }),
       },
     });
-    log.info({ resume }, "autonomous_agent_start");
+
+    // Load the prior findings to re-verify. Preserve retestIds order so the
+    // agent's [F#] handles line up with the originals during reconciliation.
+    let retestTargets:
+      | { id: string; title: string; severity: string; location: string; summary: string }[]
+      | undefined;
+    if (isRetest && retestIds.length) {
+      const rows = await prisma.finding.findMany({
+        where: { id: { in: retestIds } },
+        select: { id: true, title: true, severity: true, location: true, summary: true },
+      });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      retestTargets = retestIds
+        .map((id) => byId.get(id))
+        .filter((f): f is NonNullable<typeof f> => Boolean(f))
+        .map((f) => ({
+          id: f.id,
+          title: f.title,
+          severity: String(f.severity),
+          location: f.location,
+          summary: f.summary,
+        }));
+    }
+
+    log.info({ resume, isRetest }, "autonomous_agent_start");
     const result = await runAutonomousScan({
       prisma,
       scanId,
@@ -121,23 +166,37 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
       ),
       model: "vaptbooster-default",
       resume,
+      kind: scanKind,
+      retestTargets,
     });
     if (result.status === "completed") {
-      await prisma.tenantBudget
-        .update({ where: { tenantId }, data: { creditsUsedThisPeriod: { increment: 1 } } })
-        .catch(() => {});
-      await notifyScanRequester(
-        scanId,
-        result.totalFindings > 0 ? "finding_critical" : "scan_completed",
-        `Scan completed — ${result.totalFindings} finding${result.totalFindings === 1 ? "" : "s"}`,
-        scan.targetValue
-      );
+      if (isRetest && retestTargets?.length) {
+        // Regression verdict: mark each prior finding fixed vs still-present.
+        // Retests are a courtesy re-check — they do NOT consume a plan scan.
+        const outcome = await reconcileRetest(scanId, retestTargets);
+        await notifyScanRequester(
+          scanId,
+          "scan_completed",
+          `Retest complete — ${outcome.fixed} fixed, ${outcome.present} still present`,
+          scan.targetValue
+        );
+      } else {
+        await prisma.tenantBudget
+          .update({ where: { tenantId }, data: { creditsUsedThisPeriod: { increment: 1 } } })
+          .catch(() => {});
+        await notifyScanRequester(
+          scanId,
+          result.totalFindings > 0 ? "finding_critical" : "scan_completed",
+          `Scan completed — ${result.totalFindings} finding${result.totalFindings === 1 ? "" : "s"}`,
+          scan.targetValue
+        );
+      }
     } else {
       await notifyScanRequester(scanId, "scan_failed", "Scan failed", result.error ?? "autonomous agent error");
     }
     await notifyOperatorsOfScanFindings(scanId, scan.target.value);
     log.info(
-      { status: result.status, findings: result.totalFindings, spentUsdCents: result.spentCents, resume },
+      { status: result.status, findings: result.totalFindings, spentUsdCents: result.spentCents, resume, isRetest },
       "autonomous_agent_done"
     );
     return;
@@ -415,6 +474,40 @@ async function persistReconFindings(
       },
     });
   }
+}
+
+// After a retest completes, decide each prior finding's fate: it's still
+// present if the agent re-reported it (its [F#] handle appears in a retest-scan
+// finding title), otherwise it's verified fixed. Handles map to the targets
+// array by position (F1 = targets[0], …).
+async function reconcileRetest(
+  scanId: string,
+  targets: { id: string }[]
+): Promise<{ fixed: number; present: number }> {
+  const reported = await prisma.finding
+    .findMany({ where: { scanId }, select: { title: true } })
+    .catch(() => [] as { title: string }[]);
+  const stillPresent = new Set<number>();
+  for (const f of reported) {
+    const m = f.title.match(/\[F(\d+)\]/i);
+    if (m) stillPresent.add(Number(m[1]));
+  }
+  let fixed = 0;
+  let present = 0;
+  for (let i = 0; i < targets.length; i++) {
+    if (stillPresent.has(i + 1)) {
+      present++;
+      await prisma.finding
+        .update({ where: { id: targets[i].id }, data: { status: FindingStatus.open, fixedAt: null } })
+        .catch(() => {});
+    } else {
+      fixed++;
+      await prisma.finding
+        .update({ where: { id: targets[i].id }, data: { status: FindingStatus.fixed, fixedAt: new Date() } })
+        .catch(() => {});
+    }
+  }
+  return { fixed, present };
 }
 
 // =============================================================

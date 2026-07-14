@@ -6,6 +6,7 @@ import { Panel } from "@/components/ui/Panel";
 import { SeverityBadge } from "@/components/ui/Badge";
 import type { Finding, Severity, FindingStatus } from "@/lib/mock-data";
 import { updateFindingStatus } from "@/lib/actions/findings";
+import { RetestButton } from "@/components/scans/RetestButton";
 import { timeAgo, cn } from "@/lib/utils";
 
 const SEVERITIES: Severity[] = ["critical", "high", "medium", "low", "info"];
@@ -87,6 +88,9 @@ export function FindingsExplorer({ findings }: { findings: Finding[] }) {
                 <div className="flex flex-col gap-1.5 shrink-0 pt-0.5">
                   <SeverityBadge severity={f.severity} />
                   <FindingStatusControl id={f.id} status={f.status} />
+                  {f.severity !== "info" && (
+                    <RetestButton findingIds={[f.id]} redirectTo="/scans/" />
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0">

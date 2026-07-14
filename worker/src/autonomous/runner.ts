@@ -201,6 +201,136 @@ function costCents(u: OpenAI.CompletionUsage | undefined, model: string): number
   return Math.round(((u.prompt_tokens ?? 0) * p.in + (u.completion_tokens ?? 0) * p.out) * 100);
 }
 
+// Retest input — one prior finding the agent must re-verify.
+export type RetestTarget = {
+  id: string;
+  title: string;
+  severity: string;
+  location: string;
+  summary: string;
+};
+
+// Incremental memory: compact brief of what earlier assessments of THIS target
+// already discovered, so a fresh scan skips redundant recon and goes deeper.
+// Returns null when there's no prior completed scan (→ true cold start).
+async function buildPriorKnowledge(
+  prisma: PrismaClient,
+  tenantId: string,
+  targetValue: string,
+  currentScanId: string
+): Promise<string | null> {
+  const priorScans = await prisma.scan
+    .findMany({
+      where: {
+        tenantId,
+        targetValue,
+        id: { not: currentScanId },
+        status: ScanStatus.completed,
+      },
+      select: { id: true },
+      orderBy: { completedAt: "desc" },
+      take: 10,
+    })
+    .catch(() => [] as { id: string }[]);
+  if (!priorScans.length) return null;
+
+  const prior = await prisma.finding
+    .findMany({
+      where: { scanId: { in: priorScans.map((s) => s.id) } },
+      select: { title: true, severity: true, status: true, location: true, summary: true },
+      orderBy: { discoveredAt: "desc" },
+      take: 300,
+    })
+    .catch(() => [] as { title: string; severity: string; status: string; location: string; summary: string }[]);
+  if (!prior.length) return null;
+
+  const endpoints = new Set<string>();
+  const tech = new Set<string>();
+  const vulns: { severity: string; title: string; status: string; location: string }[] = [];
+  const rank: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  for (const f of prior) {
+    if (f.location && f.location !== targetValue) endpoints.add(f.location);
+    const sev = String(f.severity);
+    if (sev === "info") {
+      // Recon/fingerprint findings carry endpoint + tech lists in their summary.
+      if (/fingerprint|technolog/i.test(f.title)) {
+        f.summary.split("\n").map((s) => s.trim()).filter(Boolean).slice(0, 20).forEach((t) => tech.add(t));
+      } else {
+        f.summary
+          .split("\n")
+          .map((s) => s.trim())
+          .filter((l) => l.startsWith("/") || /^https?:\/\//.test(l))
+          .slice(0, 60)
+          .forEach((e) => endpoints.add(e));
+      }
+      continue;
+    }
+    vulns.push({ severity: sev, title: f.title, status: String(f.status), location: f.location });
+  }
+
+  const seen = new Set<string>();
+  const dedupVulns = vulns
+    .filter((v) => {
+      const k = `${v.title}|${v.location}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .sort((a, b) => (rank[a.severity] ?? 9) - (rank[b.severity] ?? 9))
+    .slice(0, 30);
+
+  const epList = [...endpoints].slice(0, 50);
+  const techList = [...tech].slice(0, 15);
+
+  const parts: string[] = [
+    `=== PRIOR KNOWLEDGE (from ${priorScans.length} earlier assessment(s) of this exact target) ===`,
+    `You have assessed this target before. Use this to AVOID redundant recon and go DEEPER — but VERIFY, don't assume: the app may have changed. Re-confirm each prior finding still reproduces (a now-fixed one is a valid negative), then spend the rest of your budget on surface you have NOT covered before.`,
+  ];
+  if (techList.length) parts.push(`\nKnown tech / fingerprint:\n${techList.map((t) => `- ${t}`).join("\n")}`);
+  if (epList.length)
+    parts.push(`\nKnown endpoints / paths (start here, then expand):\n${epList.map((e) => `- ${e}`).join("\n")}`);
+  if (dedupVulns.length)
+    parts.push(
+      `\nPreviously reported findings (re-verify each, then look beyond them):\n${dedupVulns
+        .map((v) => `- [${v.severity.toUpperCase()}] ${v.title} @ ${v.location} (was: ${v.status})`)
+        .join("\n")}`
+    );
+  return parts.join("\n");
+}
+
+// Retest mode — a scoped regression check. The agent verifies ONLY the listed
+// prior findings (with handles [F1]..[Fn]) and re-reports the ones still present.
+function buildRetestPrompt(
+  targetUrl: string,
+  host: string,
+  budgetCents: number,
+  methodology: string,
+  targets: RetestTarget[]
+): { system: string; user: string } {
+  const list = targets
+    .map(
+      (f, i) =>
+        `[F${i + 1}] (${f.severity}) ${f.title}\n    location: ${f.location}\n    original evidence: ${f.summary.slice(0, 500)}`
+    )
+    .join("\n\n");
+  const system = `You are VAPTBOOSTER's autonomous penetration-testing agent running a REGRESSION RE-TEST (not a full assessment). You operate a shell INSIDE an egress-locked sandbox that can reach ONLY the authorized target: ${targetUrl}. The box carries a full command-line web-pentest arsenal (nmap, sqlmap, ffuf, nuclei, curl, python3, etc.).
+
+Your ONLY job: for each previously-confirmed finding below, determine whether it is STILL exploitable or has been FIXED. Do NOT hunt for new vulnerabilities — stay strictly scoped to these items and be fast + efficient.
+
+RULES:
+- Only ${host} is in scope. The sandbox blocks every other host at the network layer.
+- NON-DESTRUCTIVE detection only. One throwaway test account to authenticate is allowed.
+- For EACH item you can STILL reproduce with concrete evidence, call report_finding and START its title with the handle in brackets, e.g. "[F2] SQL injection still exploitable on /login". Put the fresh evidence in the summary.
+- If an item NO LONGER reproduces (properly fixed), do NOT report it — just record your reasoning.
+- You have ~$${(budgetCents / 100).toFixed(2)} of budget. When every item has a verdict, call finish with a per-handle summary (e.g. "F1 fixed, F2 still present").
+- Apply the methodology's validation discipline: confirm, don't guess. Use load_skill to pull a deep playbook for a class if you need it.
+
+=== METHODOLOGY (validation discipline) ===
+${methodology}`;
+  const user = `Target: ${targetUrl}. Re-test these ${targets.length} previously-confirmed finding(s); report which are STILL present (with the [F#] handle prefix) and finish with a verdict for each:\n\n${list}`;
+  return { system, user };
+}
+
 // Keep the context from ballooning (huge tool outputs spike tokens/min and hit
 // rate limits). Shrink the bulky output of OLD tool calls while preserving the
 // system prompt, the task, the recent turns, and all of the agent's reasoning.
@@ -282,6 +412,8 @@ export async function runAutonomousScan(opts: {
   targetIp?: string;
   network?: string;
   resume?: boolean; // continue a prior run from its saved checkpoint
+  kind?: string; // "assessment" (default) | "retest"
+  retestTargets?: RetestTarget[]; // prior findings to re-verify (kind=retest)
 }): Promise<AutonomousResult> {
   const { prisma, scanId, tenantId, targetUrl, virtualKey } = opts;
   const model = opts.model ?? "vaptbooster-default";
@@ -386,6 +518,19 @@ export async function runAutonomousScan(opts: {
         "info",
         `resuming from turn ${startTurn} · $${(priorSpentCents / 100).toFixed(2)} already spent · ${prior} prior finding(s)`
       );
+    } else if (opts.kind === "retest" && opts.retestTargets && opts.retestTargets.length) {
+      // Scoped regression re-test — verify ONLY the listed prior findings.
+      const methodology = await loadStrategicSkills(prisma);
+      await log(
+        "system",
+        "info",
+        `retest mode · re-verifying ${opts.retestTargets.length} prior finding(s)`
+      );
+      const rt = buildRetestPrompt(targetUrl, host, budgetCents, methodology, opts.retestTargets);
+      messages = [
+        { role: "system", content: rt.system },
+        { role: "user", content: rt.user },
+      ];
     } else {
       const methodology = await loadStrategicSkills(prisma);
       const catalog = await loadTacticalCatalog(prisma);
@@ -424,9 +569,24 @@ ${methodology}
 Each entry below is a DEEP playbook (techniques, payloads, bypass ladders, validation, false positives). Before testing a vulnerability class, call load_skill with its key(s) to pull the full playbook into context — do NOT rely on the one-line summary alone. Cover every category in the methodology's checklist.
 ${catalog.index}`;
 
+      // Incremental scan: prime with what earlier assessments of this target
+      // already found, so the agent doesn't re-recon from zero.
+      const prior = await buildPriorKnowledge(prisma, tenantId, opts.fallbackLocation, scanId);
+      if (prior) {
+        await log(
+          "system",
+          "info",
+          "incremental scan · prior-knowledge brief loaded (reusing earlier recon + findings)"
+        );
+      }
       messages = [
         { role: "system", content: system },
-        { role: "user", content: `Target: ${targetUrl}. Begin the authorized penetration test.` },
+        {
+          role: "user",
+          content:
+            `Target: ${targetUrl}. Begin the authorized penetration test.` +
+            (prior ? `\n\n${prior}` : ""),
+        },
       ];
     }
 

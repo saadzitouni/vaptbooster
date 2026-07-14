@@ -7,6 +7,7 @@ import type { Severity } from "@/lib/mock-data";
 import { requireOperator } from "@/lib/session";
 import { getOperatorFindingDetail } from "@/lib/queries";
 import { FindingTriagePanel } from "@/components/operator/FindingTriagePanel";
+import { RetestButton } from "@/components/scans/RetestButton";
 import { timeAgo } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,9 @@ export default async function OperatorFindingDetailPage({
             <SeverityBadge severity={finding.severity as Severity} />
             <Badge tone="mute">{finding.status}</Badge>
             {finding.reproducedBy && <Badge tone="ok">verified</Badge>}
+            {finding.severity !== "info" && (
+              <RetestButton findingIds={[finding.id]} label="Retest" size="md" />
+            )}
           </div>
         }
       />
