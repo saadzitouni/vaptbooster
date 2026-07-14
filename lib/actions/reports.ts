@@ -5,7 +5,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { withTenant, withOperator, type TxClient } from "@/lib/db";
-import { LOGO_MAX_BYTES, type ReportFinding, type ReportSeverity } from "@/lib/report";
+import {
+  LOGO_MAX_BYTES,
+  normalizeFindings,
+  type ReportFinding,
+  type ReportSeverity,
+} from "@/lib/report";
 
 // -------------------------------------------------------------
 // Actor resolution — reports are authored by tenant members OR operators.
@@ -138,22 +143,27 @@ export async function createReport(input: {
 // -------------------------------------------------------------
 // Update — persist the full editable surface. Returns inline feedback.
 // -------------------------------------------------------------
-const findingSchema = z.object({
-  id: z.string().max(64),
-  title: z.string().max(300),
-  severity: z.enum(["critical", "high", "medium", "low", "info"]),
-  cwe: z.string().max(40),
-  location: z.string().max(500),
-  description: z.string().max(20000),
-  remediation: z.string().max(20000),
+// Findings are coerced (normalizeFindings) rather than strict-validated, so a
+// stray/undefined field on an older or imported finding can never fail the save
+// with an opaque "Invalid input". Optional/defaulted fields below are likewise
+// tolerant of undefined for the same reason.
+const FIELD_CAP = 20000;
+const clampFinding = (f: ReportFinding): ReportFinding => ({
+  ...f,
+  id: f.id.slice(0, 64),
+  title: f.title.slice(0, 300),
+  cwe: f.cwe.slice(0, 40),
+  location: f.location.slice(0, 500),
+  description: f.description.slice(0, FIELD_CAP),
+  remediation: f.remediation.slice(0, FIELD_CAP),
 });
 
 const updateSchema = z.object({
   title: z.string().trim().min(1, "Title is required.").max(300),
-  clientName: z.string().max(200),
+  clientName: z.string().max(200).optional().default(""),
   clientTagline: z.string().max(200).nullable().optional(),
   engagementRef: z.string().max(200).nullable().optional(),
-  preparedBy: z.string().max(200),
+  preparedBy: z.string().max(200).optional().default(""),
   logoDataUrl: z
     .string()
     .max(900_000)
@@ -166,8 +176,8 @@ const updateSchema = z.object({
   executiveSummary: z.string().max(50000).nullable().optional(),
   scopeText: z.string().max(50000).nullable().optional(),
   methodology: z.string().max(50000).nullable().optional(),
-  findings: z.array(findingSchema).max(500),
-  confidential: z.boolean(),
+  findings: z.array(z.unknown()).max(500).optional().default([]),
+  confidential: z.boolean().optional().default(true),
 });
 
 export async function updateReport(
@@ -177,12 +187,17 @@ export async function updateReport(
   const actor = await requireActor();
   const parsed = updateSchema.safeParse(data);
   if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    // Name the offending field — "Invalid input" alone is useless to diagnose.
+    const where = issue?.path.length ? issue.path.join(".") : "form";
     return {
       ok: false,
-      message: parsed.error.issues[0]?.message ?? "Invalid report data.",
+      message: issue ? `${where}: ${issue.message}` : "Invalid report data.",
     };
   }
   const d = parsed.data;
+  // Coerce findings to valid ReportFindings (never rejects) + cap field lengths.
+  const findings = normalizeFindings(d.findings).slice(0, 500).map(clampFinding);
 
   // Hard cap on logo bytes (base64 → bytes ≈ len * 3/4).
   if (d.logoDataUrl) {
@@ -214,7 +229,7 @@ export async function updateReport(
           executiveSummary: d.executiveSummary ?? null,
           scopeText: d.scopeText ?? null,
           methodology: d.methodology ?? null,
-          findings: d.findings as unknown as object,
+          findings: findings as unknown as object,
           confidential: d.confidential,
         },
       });
