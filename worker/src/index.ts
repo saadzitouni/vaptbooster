@@ -642,14 +642,24 @@ function sleep(ms: number) {
 // =============================================================
 // BullMQ worker setup
 // =============================================================
+// Max scans to run in parallel. Each autonomous scan spins up a heavy Kali
+// sandbox (~0.5–1.5 GB under load), so real parallelism is bounded by the worker
+// host's RAM, not CPU. Default 2 to stay safe on small VPSes; raise via
+// WORKER_CONCURRENCY on a bigger box (clamped to 1–16). Horizontal alternative:
+// run several worker containers — BullMQ shares one queue across all of them.
+const CONCURRENCY = Math.max(
+  1,
+  Math.min(16, Math.floor(Number(process.env.WORKER_CONCURRENCY) || 2))
+);
+
 const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
 const worker = new Worker(QUEUE_NAME, processScan, {
   connection: connection as unknown as ConnectionOptions,
-  concurrency: 4, // run up to 4 scans in parallel
+  concurrency: CONCURRENCY,
 });
 
 worker.on("ready", () =>
-  logger.info({ simulate: SIMULATE }, "scan_worker_ready")
+  logger.info({ simulate: SIMULATE, concurrency: CONCURRENCY }, "scan_worker_ready")
 );
 worker.on("active", (job) => logger.info({ jobId: job.id }, "scan_started"));
 worker.on("completed", (job) => logger.info({ jobId: job.id }, "job_completed"));

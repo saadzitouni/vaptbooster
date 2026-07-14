@@ -168,6 +168,10 @@ services:
       # longer before "budget reached — stopping". Still bounded by the scan's own
       # ceiling. Default 6.
       AGENT_MAX_BUDGET_USD: ${AGENT_MAX_BUDGET_USD:-6}
+      # How many scans run in parallel. Each autonomous scan launches a heavy Kali
+      # sandbox (~0.5–1.5 GB), so this is bounded by THIS host's RAM. Default 2 to
+      # stay safe on a small VPS; raise on a bigger box (max 16).
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
     volumes:
       - ./.secrets:/secrets:ro
       # Autonomous mode launches sibling sandbox containers on the host. This
