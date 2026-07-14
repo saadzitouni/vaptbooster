@@ -332,6 +332,25 @@ export async function retestFindings(
         throw new Error("Target is not verified — verify it under Scope before retesting.");
       }
 
+      // Retest quota (tenant self-service only — operators bypass, like scans).
+      // A retest doesn't consume a scan, but each is a full paid run, so cap it
+      // per period to prevent a fix→retest loop being used for unlimited scans.
+      // Row-lock first so concurrent retests can't race past the cap.
+      if (!isOperator) {
+        await db.$executeRawUnsafe(
+          'SELECT 1 FROM tenant_budgets WHERE "tenantId" = $1 FOR UPDATE',
+          findingTenant
+        );
+        const usage = await getPlanUsage(db, findingTenant);
+        if (usage.retestAtLimit) {
+          throw new Error(
+            `Retest limit reached — ${usage.retestsUsed}/${usage.retestsIncluded} retests used this period. Resets ${new Date(
+              usage.resetsAt
+            ).toLocaleDateString("en-GB")}. Contact us to raise your plan.`
+          );
+        }
+      }
+
       const scan = await db.scan.create({
         data: {
           tenantId: findingTenant,

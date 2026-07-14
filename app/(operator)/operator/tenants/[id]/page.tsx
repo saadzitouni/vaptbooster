@@ -48,7 +48,7 @@ export default async function OperatorTenantDetailPage({
       />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <Stat label="Plan" value={tenant.plan} emphasis="serif" />
         <Stat
           label="LiteLLM key"
@@ -59,6 +59,12 @@ export default async function OperatorTenantDetailPage({
           label="Scans used"
           value={`${usage.used}/${usage.included}`}
           tone={usage.atLimit ? "crit" : "default"}
+          emphasis="serif"
+        />
+        <Stat
+          label="Retests used"
+          value={`${usage.retestsUsed}/${usage.retestsIncluded}`}
+          tone={usage.retestAtLimit ? "crit" : "default"}
           emphasis="serif"
         />
         <Stat label="Spend · period" value={`$${(tenant.spendUsdCents / 100).toFixed(2)}`} emphasis="serif" />
