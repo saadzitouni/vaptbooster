@@ -35,10 +35,12 @@ export async function getPlanUsage(
 
   // Scan-quota window — independent of the billing/cost window
   // (currentPeriodStart). Falls back to the billing window, then a rolling 30d.
+  // The final fallback is now-PERIOD (NOT now): a tenant with no budget row must
+  // still be counted over a real window, not handed an empty (unlimited) one.
   let periodStart =
     budget?.scanPeriodStart?.getTime() ??
     budget?.currentPeriodStart?.getTime() ??
-    now;
+    now - PERIOD_MS;
   let advanced = false;
   while (periodStart + PERIOD_MS <= now) {
     periodStart += PERIOD_MS;

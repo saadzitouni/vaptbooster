@@ -201,6 +201,19 @@ function costCents(u: OpenAI.CompletionUsage | undefined, model: string): number
   return Math.round(((u.prompt_tokens ?? 0) * p.in + (u.completion_tokens ?? 0) * p.out) * 100);
 }
 
+// Normalize a model-supplied severity to the DB enum. LLMs routinely return
+// off-enum values ("Critical", "informational", "moderate", "High ") even with
+// a tool-schema enum; without this the Prisma create throws and a CONFIRMED
+// finding is silently lost. Unknown → medium so nothing is hidden.
+function normSeverity(v: unknown): Severity {
+  const s = String(v ?? "").toLowerCase().trim();
+  if (s.startsWith("crit")) return "critical" as Severity;
+  if (s.startsWith("high")) return "high" as Severity;
+  if (s.startsWith("low") || s.startsWith("minor")) return "low" as Severity;
+  if (s.startsWith("info")) return "info" as Severity;
+  return "medium" as Severity;
+}
+
 // Retest input — one prior finding the agent must re-verify.
 export type RetestTarget = {
   id: string;
@@ -391,6 +404,10 @@ async function docker(args: string[], timeoutMs = 30000): Promise<{ out: string;
 // =============================================================
 export type AutonomousResult = {
   status: "completed" | "failed" | "cancelled";
+  // True only when the agent explicitly called finish (not budget/turn cutoff,
+  // cancel, or error). Retest reconciliation trusts a verdict only when this is
+  // true — otherwise an un-reached finding must NOT be assumed fixed.
+  finishedCleanly: boolean;
   spentCents: number;
   findings: { severity: string; title: string }[];
   totalFindings: number;
@@ -476,7 +493,7 @@ export async function runAutonomousScan(opts: {
       where: { id: scanId },
       data: { status: ScanStatus.failed, completedAt: new Date(), currentStep: msg, progress: 100 },
     });
-    return { status: "failed", spentCents: 0, findings: [], totalFindings: 0, error: msg };
+    return { status: "failed", finishedCleanly: false, spentCents: 0, findings: [], totalFindings: 0, error: msg };
   }
 
   // Launch the egress-locked sandbox.
@@ -493,7 +510,7 @@ export async function runAutonomousScan(opts: {
       where: { id: scanId },
       data: { status: ScanStatus.failed, completedAt: new Date(), currentStep: msg, progress: 100 },
     });
-    return { status: "failed", spentCents: 0, findings: [], totalFindings: 0, error: msg };
+    return { status: "failed", finishedCleanly: false, spentCents: 0, findings: [], totalFindings: 0, error: msg };
   }
 
   await log("system", "info", `autonomous agent · sandbox ${cid.slice(0, 12)} · egress-locked → ${ips.join(", ")}`);
@@ -501,6 +518,7 @@ export async function runAutonomousScan(opts: {
 
   let terminal: ScanStatus = ScanStatus.completed;
   let failMsg: string | null = null;
+  let agentFinished = false; // set only when the agent calls finish()
 
   try {
     const client = new OpenAI({
@@ -658,26 +676,34 @@ ${catalog.index}`;
           result = await loadSkillBodies(prisma, keys);
           await log("system", "info", `↓ loaded playbook(s): ${keys.slice(0, 5).join(", ") || "(none)"}`);
         } else if (tc.function.name === "report_finding") {
-          const sev = String(a.severity ?? "info");
-          await prisma.finding.create({
-            data: {
-              tenantId,
-              scanId,
-              title: String(a.title ?? "Finding"),
-              summary: String(a.summary ?? ""),
-              severity: sev as Severity,
-              status: FindingStatus.open,
-              cwe: (a.cwe as string) ?? null,
-              location: String(a.location ?? opts.fallbackLocation),
-              remediation: (a.remediation as string) ?? null,
-            },
-          }).catch(() => {});
-          findings.push({ severity: sev, title: String(a.title ?? "Finding") });
-          await log("system", sev === "critical" || sev === "high" ? "crit" : sev === "medium" ? "warn" : "info", `[${sev.toUpperCase()}] ${a.title}`);
-          result = "recorded";
+          const sev = normSeverity(a.severity);
+          const title = String(a.title ?? "Finding");
+          try {
+            await prisma.finding.create({
+              data: {
+                tenantId,
+                scanId,
+                title,
+                summary: String(a.summary ?? ""),
+                severity: sev,
+                status: FindingStatus.open,
+                cwe: (a.cwe as string) ?? null,
+                location: String(a.location ?? opts.fallbackLocation),
+                remediation: (a.remediation as string) ?? null,
+              },
+            });
+            findings.push({ severity: sev, title });
+            await log("system", sev === "critical" || sev === "high" ? "crit" : sev === "medium" ? "warn" : "info", `[${sev.toUpperCase()}] ${title}`);
+            result = "recorded";
+          } catch (e) {
+            // Surface the failure instead of silently dropping a confirmed finding.
+            await log("system", "warn", `finding NOT saved (${String((e as Error)?.message ?? e).slice(0, 80)})`);
+            result = "error: finding was NOT saved — retry report_finding with a valid severity (critical|high|medium|low|info)";
+          }
         } else if (tc.function.name === "finish") {
           await log("claude", "ok", `✓ engagement complete — ${a.summary ?? ""}`);
           finished = true;
+          agentFinished = true;
           result = "ok";
         } else {
           result = "unknown_tool";
@@ -713,25 +739,35 @@ ${catalog.index}`;
     .count({ where: { scanId } })
     .catch(() => findings.length);
 
-  await prisma.scan.update({
-    where: { id: scanId },
-    data: {
-      status: terminal,
-      completedAt: new Date(),
-      progress: 100,
-      currentStep: failMsg ? failMsg.slice(0, 120) : null,
-      spentUsdCents: spentCents,
-      creditsConsumed: 1,
-    },
-  });
+  const finalData = {
+    completedAt: new Date(),
+    progress: 100,
+    currentStep: failMsg ? failMsg.slice(0, 120) : null,
+    spentUsdCents: spentCents,
+    creditsConsumed: 1,
+  };
+  let effectiveTerminal = terminal;
+  if (terminal === ScanStatus.cancelled) {
+    await prisma.scan.update({ where: { id: scanId }, data: { status: terminal, ...finalData } });
+  } else {
+    // Never clobber a cancel that landed mid-turn (after the top-of-loop check
+    // but before we got here). If 0 rows match, the scan was cancelled — honor
+    // it so the worker doesn't charge a credit / send a "completed" alert.
+    const res = await prisma.scan.updateMany({
+      where: { id: scanId, status: { not: ScanStatus.cancelled } },
+      data: { status: terminal, ...finalData },
+    });
+    if (res.count === 0) effectiveTerminal = ScanStatus.cancelled;
+  }
 
   return {
     status:
-      terminal === ScanStatus.completed
+      effectiveTerminal === ScanStatus.completed
         ? "completed"
-        : terminal === ScanStatus.cancelled
+        : effectiveTerminal === ScanStatus.cancelled
         ? "cancelled"
         : "failed",
+    finishedCleanly: agentFinished && effectiveTerminal === ScanStatus.completed,
     spentCents,
     findings,
     totalFindings,

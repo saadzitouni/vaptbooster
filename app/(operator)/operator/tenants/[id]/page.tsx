@@ -117,9 +117,9 @@ export default async function OperatorTenantDetailPage({
           <ul>
             {scans.map((s) => (
               <li key={s.id} className="px-5 py-3 border-t border-line first:border-t-0 flex items-center justify-between gap-3">
-                <Link href={`/scans/${s.id}`} className="font-mono text-[13px] truncate hover:text-fg text-fg-2">
+                <span className="font-mono text-[13px] truncate text-fg-2">
                   {s.targetValue}
-                </Link>
+                </span>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-2xs text-fg-mute font-mono">{timeAgo(s.requestedAt)}</span>
                   <ScanStatusBadge status={s.status as ScanStatus} />

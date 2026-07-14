@@ -46,6 +46,14 @@ export async function requestScan(formData: FormData) {
       );
     }
 
+    // Serialize concurrent scan requests for this tenant so the quota gate
+    // (count-then-insert) can't be raced past the limit. Locks the tenant's
+    // budget row for this transaction; parallel requests wait here.
+    await db.$executeRawUnsafe(
+      'SELECT 1 FROM tenant_budgets WHERE "tenantId" = $1 FOR UPDATE',
+      tenantId
+    );
+
     // Plan quota — hard block once the tenant has used all their scans this
     // billing period. (Operators bypass: they don't go through requestScan.)
     const usage = await getPlanUsage(db, tenantId);

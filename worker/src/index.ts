@@ -172,14 +172,25 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     if (result.status === "completed") {
       if (isRetest && retestTargets?.length) {
         // Regression verdict: mark each prior finding fixed vs still-present.
-        // Retests are a courtesy re-check — they do NOT consume a plan scan.
-        const outcome = await reconcileRetest(scanId, retestTargets);
-        await notifyScanRequester(
-          scanId,
-          "scan_completed",
-          `Retest complete — ${outcome.fixed} fixed, ${outcome.present} still present`,
-          scan.targetValue
-        );
+        // Only trust it when the agent actually FINISHED (not a budget/turn
+        // cutoff) — otherwise an un-reached finding would be wrongly marked
+        // fixed. Retests are a courtesy re-check — they never consume a scan.
+        if (result.finishedCleanly) {
+          const outcome = await reconcileRetest(scanId, retestTargets);
+          await notifyScanRequester(
+            scanId,
+            "scan_completed",
+            `Retest complete — ${outcome.fixed} fixed, ${outcome.present} still present`,
+            scan.targetValue
+          );
+        } else {
+          await notifyScanRequester(
+            scanId,
+            "scan_completed",
+            "Retest ended early — no statuses changed. Re-run to get a verdict.",
+            scan.targetValue
+          );
+        }
       } else {
         await prisma.tenantBudget
           .update({ where: { tenantId }, data: { creditsUsedThisPeriod: { increment: 1 } } })

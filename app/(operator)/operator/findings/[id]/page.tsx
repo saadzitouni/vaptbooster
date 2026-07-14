@@ -32,12 +32,9 @@ export default async function OperatorFindingDetailPage({
 
   return (
     <>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6">
         <Link href="/operator/findings" className="text-2xs text-fg-mute font-mono hover:text-fg">
           ← findings firehose
-        </Link>
-        <Link href={`/scans/${finding.scanId}`} className="text-2xs text-fg-mute font-mono hover:text-fg">
-          source scan →
         </Link>
       </div>
 

@@ -89,7 +89,9 @@ export default async function DashboardPage() {
           emphasis="serif"
           change={
             runningScans.length > 0
-              ? `Started ${timeAgo(runningScans[0].startedAt!)}`
+              ? runningScans[0].startedAt
+                ? `Started ${timeAgo(runningScans[0].startedAt)}`
+                : "Starting…"
               : "Idle."
           }
         />
@@ -139,8 +141,11 @@ export default async function DashboardPage() {
                     {runningScans[0].targetValue}
                   </div>
                   <div className="mt-2 text-2xs text-fg-mute font-mono">
-                    Started {timeAgo(runningScans[0].startedAt!)} · by{" "}
-                    {runningScans[0].requesterName}
+                    Started{" "}
+                    {runningScans[0].startedAt
+                      ? timeAgo(runningScans[0].startedAt)
+                      : "just now"}{" "}
+                    · by {runningScans[0].requesterName}
                   </div>
                 </div>
                 <ScanStatusBadge status={runningScans[0].status} />
