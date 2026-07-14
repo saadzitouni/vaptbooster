@@ -966,3 +966,53 @@ export async function getAgentConfig(): Promise<MockAgentConfig> {
     };
   });
 }
+
+// -------------------------------------------------------------
+// Workspace settings — tenant profile, members, pending invites, plan usage.
+// -------------------------------------------------------------
+export async function getWorkspaceSettings(tenantId: string, currentUserId: string) {
+  return withTenant(tenantId, async (db) => {
+    const [tenant, members, invites, usage] = await Promise.all([
+      db.tenant.findFirst(),
+      db.user.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, name: true, email: true, role: true, lastLogin: true, createdAt: true },
+      }),
+      db.invite.findMany({
+        where: { tenantId, acceptedAt: null },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, email: true, createdAt: true, expiresAt: true },
+      }),
+      getPlanUsage(db, tenantId),
+    ]);
+
+    const now = Date.now();
+    return {
+      tenant: {
+        name: tenant?.name ?? "",
+        slug: tenant?.slug ?? "",
+        industry: tenant?.industry ?? "",
+        country: tenant?.country ?? "",
+        createdAt: (tenant?.createdAt ?? new Date()).toISOString(),
+      },
+      members: members.map((m) => ({
+        id: m.id,
+        name: m.name ?? "",
+        email: m.email,
+        role: String(m.role),
+        lastLogin: m.lastLogin ? m.lastLogin.toISOString() : null,
+        joinedAt: m.createdAt.toISOString(),
+        isYou: m.id === currentUserId,
+      })),
+      invites: invites.map((i) => ({
+        id: i.id,
+        email: i.email,
+        createdAt: i.createdAt.toISOString(),
+        expiresAt: i.expiresAt.toISOString(),
+        expired: i.expiresAt.getTime() < now,
+      })),
+      usage,
+    };
+  });
+}
