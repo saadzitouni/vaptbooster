@@ -191,6 +191,9 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
           scan.targetValue
         );
       }
+    } else if (result.status === "cancelled") {
+      // User-initiated stop — no failure alert (they know; they did it).
+      log.info({ scanId }, "autonomous_scan_cancelled");
     } else {
       await notifyScanRequester(scanId, "scan_failed", "Scan failed", result.error ?? "autonomous agent error");
     }
@@ -304,6 +307,13 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     await logEvent({ actor: "system", level: sevLevel(f.severity), msg: `[${f.severity.toUpperCase()}] ${f.title}` });
   }
 
+  // Stop here if the user cancelled during recon/passive — don't fire active
+  // tests (real network traffic) at a scan they've called off.
+  if (await isCancelled(scanId)) {
+    log.info("scan_cancelled");
+    return;
+  }
+
   // ---- Stage 3: active vulnerability testing (OPT-IN — only with --active) ----
   let activeFindings: ActiveFinding[] = [];
   if (active) {
@@ -350,6 +360,13 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
     level: "ok",
     msg: `scan complete · ${totalVulns} vuln findings${active ? " (incl. active)" : ""} · $${((scan.spentUsdCents + recon.spentCents) / 100).toFixed(2)}`,
   });
+
+  // If the user cancelled while active testing ran, respect it — don't clobber
+  // the cancelled status back to completed.
+  if (await isCancelled(scanId)) {
+    log.info("scan_cancelled");
+    return;
+  }
 
   // Done — mark completed. Stages 1–2 are read-only; Stage 3 (active) runs only
   // when the scan is launched with --active.
@@ -508,6 +525,15 @@ async function reconcileRetest(
     }
   }
   return { fixed, present };
+}
+
+// True once the user/operator has cancelled the scan (cancelScan flips the
+// status). Cooperative — the pipeline checks this at safe points and bails.
+async function isCancelled(scanId: string): Promise<boolean> {
+  const s = await prisma.scan
+    .findUnique({ where: { id: scanId }, select: { status: true } })
+    .catch(() => null);
+  return s?.status === ScanStatus.cancelled;
 }
 
 // =============================================================

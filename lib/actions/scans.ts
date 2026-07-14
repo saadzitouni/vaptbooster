@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { withTenant, withOperator, type TxClient } from "@/lib/db";
 import { requireTenantUser, requireOperator } from "@/lib/session";
-import { enqueueScan } from "@/lib/queue";
+import { enqueueScan, removeScanJob } from "@/lib/queue";
 import { getPlanUsage } from "@/lib/usage";
 
 const requestScanSchema = z.object({
@@ -151,6 +151,61 @@ export async function rejectScan(scanId: string) {
   });
   revalidatePath("/operator");
   revalidatePath("/operator/queue");
+}
+
+// -------------------------------------------------------------
+// Cancel a scan. Works whether it's still queued (removes the job so it never
+// starts) or already running (flips status to `cancelled`; the worker checks
+// this cooperatively each turn and stops + tears down the sandbox within
+// seconds — no need to wait for the whole scan to finish). Operator or owner.
+// -------------------------------------------------------------
+export async function cancelScan(
+  scanId: string
+): Promise<{ ok: boolean; message: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, message: "Not authenticated." };
+  const isOperator = session.user.role === "operator";
+  const tenantId = session.user.tenantId ?? "";
+  if (!isOperator && !tenantId) return { ok: false, message: "Not authorized." };
+
+  const run = <T>(fn: (db: TxClient) => Promise<T>) =>
+    isOperator ? withOperator(fn) : withTenant(tenantId, fn);
+
+  const CANCELLABLE = ["pending_approval", "queued", "running", "paused_ceiling"];
+  try {
+    await run(async (db) => {
+      const scan = await db.scan.findFirst({
+        where: { id: scanId },
+        select: { status: true },
+      });
+      if (!scan) throw new Error("Scan not found.");
+      if (!CANCELLABLE.includes(scan.status as string)) {
+        throw new Error(`Scan is ${scan.status} — nothing to cancel.`);
+      }
+      await db.scan.update({
+        where: { id: scanId },
+        data: {
+          status: "cancelled",
+          currentStep: "cancelled by user",
+          completedAt: new Date(),
+        },
+      });
+    });
+    await removeScanJob(scanId);
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : "Could not cancel the scan.",
+    };
+  }
+  revalidatePath(`/scans/${scanId}`);
+  revalidatePath("/scans");
+  revalidatePath("/dashboard");
+  revalidatePath("/operator/queue");
+  return {
+    ok: true,
+    message: "Scan cancelled — the agent stops within a few seconds.",
+  };
 }
 
 // -------------------------------------------------------------

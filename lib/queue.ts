@@ -53,3 +53,13 @@ export async function enqueueScan(
     { jobId: scanId, removeOnComplete: 200, removeOnFail: 200 }
   );
 }
+
+/**
+ * Remove a scan's queued job. If the job is still waiting, this stops it from
+ * ever starting. If it's already active (a worker is processing it), BullMQ
+ * can't force-kill it — the worker stops cooperatively when it sees the scan's
+ * `cancelled` status. Errors are swallowed either way.
+ */
+export async function removeScanJob(scanId: string) {
+  await scanQueue.remove(scanId).catch(() => {});
+}

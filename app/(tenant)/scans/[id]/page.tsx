@@ -13,6 +13,7 @@ import { getTenantScanDetail } from "@/lib/queries";
 import { LiveRefresh } from "@/components/operator/LiveRefresh";
 import { ResumeScanButton } from "@/components/scans/ResumeScanButton";
 import { RetestButton } from "@/components/scans/RetestButton";
+import { CancelScanButton } from "@/components/scans/CancelScanButton";
 import { timeAgo, hexId } from "@/lib/utils";
 
 export default async function ScanDetailPage({
@@ -82,10 +83,8 @@ export default async function ScanDetailPage({
           <>
             <ScanStatusBadge status={scan.status} />
             {canResume && <ResumeScanButton scanId={scan.id} />}
-            {scan.status === "running" && (
-              <Button variant="danger" size="md">
-                Cancel
-              </Button>
+            {(scan.status === "running" || scan.status === "queued") && (
+              <CancelScanButton scanId={scan.id} />
             )}
             {scan.status === "completed" && retestable.length > 0 && (
               <RetestButton

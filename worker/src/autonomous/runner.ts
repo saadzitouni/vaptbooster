@@ -390,7 +390,7 @@ async function docker(args: string[], timeoutMs = 30000): Promise<{ out: string;
 // uses for notifications/credits.
 // =============================================================
 export type AutonomousResult = {
-  status: "completed" | "failed";
+  status: "completed" | "failed" | "cancelled";
   spentCents: number;
   findings: { severity: string; title: string }[];
   totalFindings: number;
@@ -595,6 +595,17 @@ ${catalog.index}`;
         await log("system", "warn", `budget reached ($${(spentCents / 100).toFixed(2)}) — stopping`);
         break;
       }
+      // Cooperative cancel — the owner/operator can flip status to 'cancelled'
+      // via cancelScan while we run. Stop cleanly here (before spending another
+      // LLM call); the finally block tears down the sandbox.
+      const cancelRow = await prisma
+        .$queryRawUnsafe<{ status: string }[]>('SELECT status FROM scans WHERE id = $1', scanId)
+        .catch(() => [] as { status: string }[]);
+      if (cancelRow[0]?.status === "cancelled") {
+        await log("system", "warn", "cancelled by user — stopping");
+        terminal = ScanStatus.cancelled;
+        break;
+      }
       if (turn > 0) await new Promise((r) => setTimeout(r, 1500));
       trimContext(messages);
       const resp = await chatWithRetry(
@@ -715,7 +726,12 @@ ${catalog.index}`;
   });
 
   return {
-    status: terminal === ScanStatus.completed ? "completed" : "failed",
+    status:
+      terminal === ScanStatus.completed
+        ? "completed"
+        : terminal === ScanStatus.cancelled
+        ? "cancelled"
+        : "failed",
     spentCents,
     findings,
     totalFindings,
