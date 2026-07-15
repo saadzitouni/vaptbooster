@@ -10,7 +10,6 @@ import {
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { getTenantDashboard } from "@/lib/queries";
-import { AgentMascot, type MascotState } from "@/components/agent/AgentMascot";
 import { timeAgo, hexId } from "@/lib/utils";
 
 export default async function DashboardPage() {
@@ -32,19 +31,6 @@ export default async function DashboardPage() {
     (f) => f.severity === "high" && f.status === "open"
   );
 
-  // The agent's overall mood on the dashboard: busy scanning, alert on open
-  // severe findings, otherwise idle.
-  const severeOpen = openCriticals.length + openHighs.length;
-  const dashMascot: { state: MascotState; label: string } =
-    runningScans.length > 0
-      ? {
-          state: "scanning",
-          label: `scanning ${runningScans.length} target${runningScans.length === 1 ? "" : "s"}`,
-        }
-      : severeOpen > 0
-      ? { state: "alert", label: `${severeOpen} critical/high open` }
-      : { state: "idle", label: "all quiet" };
-
   return (
     <>
       <PageHeader
@@ -62,26 +48,18 @@ export default async function DashboardPage() {
           </>
         }
         actions={
-          <div className="flex items-center gap-5">
-            <AgentMascot
-              state={dashMascot.state}
-              label={dashMascot.label}
-              size={54}
-              className="!gap-1"
-            />
-            {usage.atLimit ? (
-              <Button variant="line" disabled title={`Plan limit reached — resets ${resetDate}`}>
-                Scan limit reached ({usage.used}/{usage.included})
+          usage.atLimit ? (
+            <Button variant="line" disabled title={`Plan limit reached — resets ${resetDate}`}>
+              Scan limit reached ({usage.used}/{usage.included})
+            </Button>
+          ) : (
+            <Link href="/scans/new">
+              <Button variant="solid">
+                Request scan
+                <ArrowRight />
               </Button>
-            ) : (
-              <Link href="/scans/new">
-                <Button variant="solid">
-                  Request scan
-                  <ArrowRight />
-                </Button>
-              </Link>
-            )}
-          </div>
+            </Link>
+          )
         }
       />
 

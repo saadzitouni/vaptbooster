@@ -14,7 +14,6 @@ import { LiveRefresh } from "@/components/operator/LiveRefresh";
 import { ResumeScanButton } from "@/components/scans/ResumeScanButton";
 import { RetestButton } from "@/components/scans/RetestButton";
 import { CancelScanButton } from "@/components/scans/CancelScanButton";
-import { AgentMascot, scanMascot } from "@/components/agent/AgentMascot";
 import { timeAgo, hexId } from "@/lib/utils";
 
 export default async function ScanDetailPage({
@@ -49,8 +48,6 @@ export default async function ScanDetailPage({
   const isActive = scan.status === "running" || scan.status === "queued";
   // Non-info findings can be re-tested after the client fixes them.
   const retestable = findings.filter((f) => f.severity !== "info").map((f) => f.id);
-  // The agent mascot mirrors the live scan state (idle / scanning / found / clear).
-  const mascot = scanMascot(scan.status, scan.findingCounts);
 
   return (
     <>
@@ -202,16 +199,8 @@ export default async function ScanDetailPage({
           </div>
         </Panel>
 
-        {/* Agent state + findings */}
-        <div className="lg:col-span-2 flex flex-col gap-5">
-          {/* Live agent mascot — mirrors the scan state */}
-          <Panel accent={mascot.state === "alert"}>
-            <div className="py-7 flex items-center justify-center">
-              <AgentMascot state={mascot.state} label={mascot.label} size={92} />
-            </div>
-          </Panel>
-
-          <Panel>
+        {/* Findings list (compact) */}
+        <Panel className="lg:col-span-2">
           <PanelHeader
             eyebrow={`${findings.length} findings`}
             title={
@@ -250,8 +239,7 @@ export default async function ScanDetailPage({
               </li>
             ))}
           </ul>
-          </Panel>
-        </div>
+        </Panel>
       </div>
     </>
   );
