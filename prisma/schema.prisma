@@ -204,6 +204,11 @@ model Scan {
   kind             String   @default("assessment")
   retestFindingIds String[] @default([]) // Finding ids being re-verified (kind=retest)
 
+  // Encrypted (AES-256-GCM) test credentials for an authenticated / gray-box
+  // scan — the agent logs in and tests the authenticated surface. Never stored
+  // in plaintext; decrypted only in the worker at run time.
+  credentials      String?  @db.Text
+
   findings     Finding[]
   reports      Report[]
   usageRecords UsageRecord[]

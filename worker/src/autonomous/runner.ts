@@ -431,6 +431,7 @@ export async function runAutonomousScan(opts: {
   resume?: boolean; // continue a prior run from its saved checkpoint
   kind?: string; // "assessment" (default) | "retest"
   retestTargets?: RetestTarget[]; // prior findings to re-verify (kind=retest)
+  authBrief?: string; // AUTHENTICATED TESTING block (creds pre-formatted) to inject
 }): Promise<AutonomousResult> {
   const { prisma, scanId, tenantId, targetUrl, virtualKey } = opts;
   const model = opts.model ?? "vaptbooster-default";
@@ -545,8 +546,11 @@ export async function runAutonomousScan(opts: {
         `retest mode · re-verifying ${opts.retestTargets.length} prior finding(s)`
       );
       const rt = buildRetestPrompt(targetUrl, host, budgetCents, methodology, opts.retestTargets);
+      if (opts.authBrief) {
+        await log("system", "info", "authenticated retest · using the provided test account");
+      }
       messages = [
-        { role: "system", content: rt.system },
+        { role: "system", content: rt.system + (opts.authBrief ? `\n\n${opts.authBrief}` : "") },
         { role: "user", content: rt.user },
       ];
     } else {
@@ -597,8 +601,15 @@ ${catalog.index}`;
           "incremental scan · prior-knowledge brief loaded (reusing earlier recon + findings)"
         );
       }
+      if (opts.authBrief) {
+        await log(
+          "system",
+          "info",
+          "authenticated scan · logging in with the provided test account"
+        );
+      }
       messages = [
-        { role: "system", content: system },
+        { role: "system", content: system + (opts.authBrief ? `\n\n${opts.authBrief}` : "") },
         {
           role: "user",
           content:

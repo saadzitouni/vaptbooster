@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { Button } from "@/components/ui/Button";
-import { Field, Textarea } from "@/components/ui/Input";
+import { Field, Input, Textarea } from "@/components/ui/Input";
 import { requireTenantId } from "@/lib/session";
 import { getTenantScope, getTenantUsage } from "@/lib/queries";
 import { requestScan } from "@/lib/actions/scans";
@@ -89,6 +89,45 @@ export default async function NewScanPage() {
                 placeholder="e.g. Skip /admin/billing — production data."
               />
             </Field>
+
+            {/* Authenticated (gray-box) scanning — optional test account */}
+            <details className="border border-line-2 rounded-lg overflow-hidden">
+              <summary className="cursor-pointer select-none px-4 py-3 text-[13px] font-mono text-fg-2 hover:text-fg bg-ink-2/40 flex items-center gap-2">
+                Authenticated scan
+                <span className="text-2xs text-fg-mute">(optional)</span>
+                <span className="text-2xs text-fg-mute ml-auto">test the logged-in surface →</span>
+              </summary>
+              <div className="p-4 flex flex-col gap-4 border-t border-line">
+                <p className="text-2xs text-fg-mute font-mono leading-relaxed">
+                  Give the agent a{" "}
+                  <span className="text-fg-2">throwaway test account</span> and it
+                  logs in first, then focuses on the authenticated surface (IDOR,
+                  broken access control, privilege escalation). Credentials are{" "}
+                  <span className="text-fg-2">encrypted at rest</span> and used only
+                  against this target. Leave blank for a black-box scan.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Login URL" hint="Where the login form / API is">
+                    <Input name="loginUrl" placeholder="https://app.example.com/login" autoComplete="off" />
+                  </Field>
+                  <Field label="Username / email" hint="The test account">
+                    <Input name="username" placeholder="pentest@example.com" autoComplete="off" />
+                  </Field>
+                  <Field label="Password" hint="Stored encrypted">
+                    <Input name="password" type="password" placeholder="••••••••" autoComplete="new-password" />
+                  </Field>
+                  <Field label="Auth header or cookie" hint="For JWT / API apps">
+                    <Input name="authHeader" placeholder="Authorization: Bearer eyJ…" autoComplete="off" />
+                  </Field>
+                </div>
+                <Field label="Auth notes" hint="Anything the agent needs to log in / stay authenticated">
+                  <Textarea
+                    name="authNotes"
+                    placeholder="e.g. token is stored in localStorage as 'jwt'; MFA is disabled for this test account."
+                  />
+                </Field>
+              </div>
+            </details>
 
             <div className="flex items-center gap-3 pt-2">
               <Button type="submit" variant="solid" size="lg" className="justify-center">

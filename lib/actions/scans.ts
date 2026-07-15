@@ -8,10 +8,17 @@ import { withTenant, withOperator, type TxClient } from "@/lib/db";
 import { requireTenantUser, requireOperator } from "@/lib/session";
 import { enqueueScan, removeScanJob } from "@/lib/queue";
 import { getPlanUsage } from "@/lib/usage";
+import { encryptScanCreds, hasAnyCred, type ScanCreds } from "@/lib/scan-credentials";
 
 const requestScanSchema = z.object({
   targetId: z.string().min(1, "Choose a target in scope."),
   notes: z.string().trim().max(2000, "Notes are too long (max 2000 chars).").optional(),
+  // Optional authenticated-scan credentials (encrypted before storage).
+  loginUrl: z.string().trim().max(500).optional(),
+  username: z.string().trim().max(200).optional(),
+  password: z.string().max(300).optional(), // not trimmed — preserve exactly
+  authHeader: z.string().trim().max(4000).optional(),
+  authNotes: z.string().trim().max(1000).optional(),
 });
 
 // -------------------------------------------------------------
@@ -25,11 +32,26 @@ export async function requestScan(formData: FormData) {
   const parsed = requestScanSchema.safeParse({
     targetId: formData.get("targetId"),
     notes: formData.get("notes") ?? undefined,
+    loginUrl: formData.get("loginUrl") ?? undefined,
+    username: formData.get("username") ?? undefined,
+    password: formData.get("password") ?? undefined,
+    authHeader: formData.get("authHeader") ?? undefined,
+    authNotes: formData.get("authNotes") ?? undefined,
   });
   if (!parsed.success) {
     throw new Error(parsed.error.issues[0]?.message ?? "Invalid scan request.");
   }
   const { targetId, notes } = parsed.data;
+
+  // Build + encrypt authenticated-scan credentials (if any provided).
+  const creds: ScanCreds = {
+    loginUrl: parsed.data.loginUrl || undefined,
+    username: parsed.data.username || undefined,
+    password: parsed.data.password || undefined,
+    authHeader: parsed.data.authHeader || undefined,
+    notes: parsed.data.authNotes || undefined,
+  };
+  const credentials = hasAnyCred(creds) ? encryptScanCreds(creds) : null;
 
   // AUTO_APPROVE_SCANS=true → skip the operator approval step: the scan is
   // queued immediately when the tenant requests it. Scope must still be verified
@@ -75,6 +97,7 @@ export async function requestScan(formData: FormData) {
         approverId: autoApprove ? userId : null,
         approvedAt: autoApprove ? new Date() : null,
         notes: notes || null,
+        credentials,
       },
     });
     newScanId = scan.id;
@@ -311,7 +334,7 @@ export async function retestFindings(
         select: {
           id: true,
           tenantId: true,
-          scan: { select: { targetId: true, targetValue: true } },
+          scan: { select: { targetId: true, targetValue: true, credentials: true } },
         },
       });
       if (!findings.length) throw new Error("Findings not found.");
@@ -359,6 +382,8 @@ export async function retestFindings(
           status: "queued",
           kind: "retest",
           retestFindingIds: findings.map((f) => f.id),
+          // Re-verify with the same auth as the original scan (if any).
+          credentials: first.scan?.credentials ?? null,
           requesterId: userId,
           approverId: userId,
           approvedAt: new Date(),

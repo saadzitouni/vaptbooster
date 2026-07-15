@@ -31,6 +31,7 @@ import { runActiveChecks, type ActiveFinding } from "./active/checks.js";
 import { runFormChecks } from "./active/forms.js";
 import { runApiTests } from "./active/api.js";
 import { runAutonomousScan } from "./autonomous/runner.js";
+import { decryptScanCreds, buildAuthBrief } from "./credentials.js";
 import { logger } from "./logger.js";
 
 const prisma = new PrismaClient();
@@ -91,18 +92,22 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
   // raw SQL — the worker's generated client predates these columns.
   let scanKind = "assessment";
   let retestIds: string[] = [];
+  let credBlob: string | null = null;
   try {
     const rows = await prisma.$queryRawUnsafe<
-      { kind: string | null; retestFindingIds: string[] | null }[]
-    >('SELECT kind, "retestFindingIds" FROM scans WHERE id = $1', scanId);
+      { kind: string | null; retestFindingIds: string[] | null; credentials: string | null }[]
+    >('SELECT kind, "retestFindingIds", credentials FROM scans WHERE id = $1', scanId);
     if (rows[0]) {
       scanKind = rows[0].kind ?? "assessment";
       retestIds = rows[0].retestFindingIds ?? [];
+      credBlob = rows[0].credentials ?? null;
     }
   } catch {
     /* columns absent on an un-migrated DB — treat as a normal assessment */
   }
   const isRetest = scanKind === "retest";
+  // Decrypt authenticated-scan credentials into an "auth brief" for the agent.
+  const authBrief = buildAuthBrief(decryptScanCreds(credBlob));
 
   // ---- Autonomous skilled-agent mode ----
   // Opt-in via AGENT_MODE=autonomous, OR forced for a retest (re-verification is
@@ -168,6 +173,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
       resume,
       kind: scanKind,
       retestTargets,
+      authBrief,
     });
     if (result.status === "completed") {
       if (isRetest && retestTargets?.length) {
