@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="156" height="168" viewBox="0 0 156 168">
+  <defs>
+    <style>
+    .rig { animation: bob 2.6s ease-in-out infinite; transform-origin:center; }
+    @keyframes bob { 0%,100% { transform: translateY(0);} 50% { transform: translateY(-4.199999999999999px);} }
+    .eye-ok { animation: settle 2.6s ease-in-out infinite; }
+    @keyframes settle { 0%,100% { fill: #5A6B4A; opacity:1;} 50% { opacity:0.7;} }
+    </style>
+
+  </defs>
+  <g class="rig">
+    <rect x="72" y="0" width="12" height="12" fill="#5A6B4A" class="ant"/>
+    <rect x="72" y="12" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="48" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="48" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="60" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="60" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="48" y="60" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="72" y="60" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="84" y="60" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="108" y="60" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="72" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="72" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="48" y="72" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="72" y="72" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="84" y="72" width="12" height="12" fill="#5A6B4A" class="eye-ok"/>
+    <rect x="108" y="72" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="0" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="120" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="0" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="120" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+  </g>
+</svg>

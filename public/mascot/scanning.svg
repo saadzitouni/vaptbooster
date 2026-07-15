@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="156" height="168" viewBox="0 0 156 168">
+  <defs>
+    <style>
+    .eye-scan { animation: eyepulse 1.1s ease-in-out infinite; }
+    @keyframes eyepulse { 0%,100% { fill: #B4231C; opacity:1; } 50% { fill: #B4231C; opacity:0.35; } }
+    .scan { animation: sweep 1.8s linear infinite; }
+    @keyframes sweep {
+      0%   { transform: translateY(-12px); opacity:0; }
+      10%  { opacity:0.5; }
+      90%  { opacity:0.5; }
+      100% { transform: translateY(168px); opacity:0; }
+    }
+    </style>
+    <mask id="fig"><rect x="72" y="0" width="12" height="12" fill="#fff"/><rect x="72" y="12" width="12" height="12" fill="#fff"/><rect x="24" y="24" width="12" height="12" fill="#fff"/><rect x="36" y="24" width="12" height="12" fill="#fff"/><rect x="48" y="24" width="12" height="12" fill="#fff"/><rect x="60" y="24" width="12" height="12" fill="#fff"/><rect x="72" y="24" width="12" height="12" fill="#fff"/><rect x="84" y="24" width="12" height="12" fill="#fff"/><rect x="96" y="24" width="12" height="12" fill="#fff"/><rect x="12" y="36" width="12" height="12" fill="#fff"/><rect x="24" y="36" width="12" height="12" fill="#fff"/><rect x="36" y="36" width="12" height="12" fill="#fff"/><rect x="48" y="36" width="12" height="12" fill="#fff"/><rect x="60" y="36" width="12" height="12" fill="#fff"/><rect x="72" y="36" width="12" height="12" fill="#fff"/><rect x="84" y="36" width="12" height="12" fill="#fff"/><rect x="96" y="36" width="12" height="12" fill="#fff"/><rect x="108" y="36" width="12" height="12" fill="#fff"/><rect x="12" y="48" width="12" height="12" fill="#fff"/><rect x="108" y="48" width="12" height="12" fill="#fff"/><rect x="12" y="60" width="12" height="12" fill="#fff"/><rect x="36" y="60" width="12" height="12" fill="#fff"/><rect x="48" y="60" width="12" height="12" fill="#fff"/><rect x="72" y="60" width="12" height="12" fill="#fff"/><rect x="84" y="60" width="12" height="12" fill="#fff"/><rect x="108" y="60" width="12" height="12" fill="#fff"/><rect x="12" y="72" width="12" height="12" fill="#fff"/><rect x="36" y="72" width="12" height="12" fill="#fff"/><rect x="48" y="72" width="12" height="12" fill="#fff"/><rect x="72" y="72" width="12" height="12" fill="#fff"/><rect x="84" y="72" width="12" height="12" fill="#fff"/><rect x="108" y="72" width="12" height="12" fill="#fff"/><rect x="12" y="84" width="12" height="12" fill="#fff"/><rect x="24" y="84" width="12" height="12" fill="#fff"/><rect x="36" y="84" width="12" height="12" fill="#fff"/><rect x="48" y="84" width="12" height="12" fill="#fff"/><rect x="60" y="84" width="12" height="12" fill="#fff"/><rect x="72" y="84" width="12" height="12" fill="#fff"/><rect x="84" y="84" width="12" height="12" fill="#fff"/><rect x="96" y="84" width="12" height="12" fill="#fff"/><rect x="108" y="84" width="12" height="12" fill="#fff"/><rect x="36" y="96" width="12" height="12" fill="#fff"/><rect x="48" y="96" width="12" height="12" fill="#fff"/><rect x="60" y="96" width="12" height="12" fill="#fff"/><rect x="72" y="96" width="12" height="12" fill="#fff"/><rect x="84" y="96" width="12" height="12" fill="#fff"/><rect x="12" y="108" width="12" height="12" fill="#fff"/><rect x="24" y="108" width="12" height="12" fill="#fff"/><rect x="36" y="108" width="12" height="12" fill="#fff"/><rect x="48" y="108" width="12" height="12" fill="#fff"/><rect x="60" y="108" width="12" height="12" fill="#fff"/><rect x="72" y="108" width="12" height="12" fill="#fff"/><rect x="84" y="108" width="12" height="12" fill="#fff"/><rect x="96" y="108" width="12" height="12" fill="#fff"/><rect x="108" y="108" width="12" height="12" fill="#fff"/><rect x="0" y="120" width="12" height="12" fill="#fff"/><rect x="12" y="120" width="12" height="12" fill="#fff"/><rect x="36" y="120" width="12" height="12" fill="#fff"/><rect x="48" y="120" width="12" height="12" fill="#fff"/><rect x="60" y="120" width="12" height="12" fill="#fff"/><rect x="72" y="120" width="12" height="12" fill="#fff"/><rect x="84" y="120" width="12" height="12" fill="#fff"/><rect x="108" y="120" width="12" height="12" fill="#fff"/><rect x="120" y="120" width="12" height="12" fill="#fff"/><rect x="0" y="132" width="12" height="12" fill="#fff"/><rect x="12" y="132" width="12" height="12" fill="#fff"/><rect x="36" y="132" width="12" height="12" fill="#fff"/><rect x="48" y="132" width="12" height="12" fill="#fff"/><rect x="60" y="132" width="12" height="12" fill="#fff"/><rect x="72" y="132" width="12" height="12" fill="#fff"/><rect x="84" y="132" width="12" height="12" fill="#fff"/><rect x="108" y="132" width="12" height="12" fill="#fff"/><rect x="120" y="132" width="12" height="12" fill="#fff"/><rect x="12" y="144" width="12" height="12" fill="#fff"/><rect x="36" y="144" width="12" height="12" fill="#fff"/><rect x="48" y="144" width="12" height="12" fill="#fff"/><rect x="60" y="144" width="12" height="12" fill="#fff"/><rect x="72" y="144" width="12" height="12" fill="#fff"/><rect x="84" y="144" width="12" height="12" fill="#fff"/><rect x="108" y="144" width="12" height="12" fill="#fff"/><rect x="24" y="156" width="12" height="12" fill="#fff"/><rect x="36" y="156" width="12" height="12" fill="#fff"/><rect x="84" y="156" width="12" height="12" fill="#fff"/><rect x="96" y="156" width="12" height="12" fill="#fff"/></mask>
+  </defs>
+  <rect x="72" y="0" width="12" height="12" fill="#B4231C" class="ant"/>
+    <rect x="72" y="12" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="24" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="36" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="48" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="48" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="60" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="60" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="48" y="60" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="72" y="60" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="84" y="60" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="108" y="60" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="72" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="72" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="48" y="72" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="72" y="72" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="84" y="72" width="12" height="12" fill="#B4231C" class="eye-scan"/>
+    <rect x="108" y="72" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="84" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="96" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="108" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="0" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="120" y="120" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="0" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="120" y="132" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="12" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="48" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="60" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="72" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="108" y="144" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="24" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="36" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="84" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+    <rect x="96" y="156" width="12" height="12" fill="#EDEDED" class="body"/>
+  <g mask="url(#fig)">
+    <rect class="scan" x="0" y="0" width="156" height="18.0" fill="#B4231C" opacity="0.0"/>
+  </g>
+</svg>
