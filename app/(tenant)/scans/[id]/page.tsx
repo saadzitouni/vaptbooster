@@ -146,9 +146,6 @@ export default async function ScanDetailPage({
                 Live <span className="em-sm">log</span>
               </>
             }
-            right={
-              <span className="text-2xs text-fg-mute font-mono">tail -f</span>
-            }
           />
           <div className="p-4 max-h-[420px] overflow-y-auto bg-ink">
             <pre className="font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">
