@@ -9,7 +9,7 @@ type NavItem = { href: string; label: string; icon: ReactNode };
 
 const TENANT_NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: <IconHome /> },
-  { href: "/scope",     label: "Scope",     icon: <IconTarget /> },
+  { href: "/assets",    label: "Assets",    icon: <IconTarget /> },
   { href: "/scans",     label: "Scans",     icon: <IconRadar /> },
   { href: "/findings",  label: "Findings",  icon: <IconBug /> },
   { href: "/reports",   label: "Reports",   icon: <IconReport /> },

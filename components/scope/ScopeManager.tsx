@@ -35,7 +35,7 @@ export function ScopeManager({ targets }: { targets: ScopeRow[] }) {
     <div className="flex flex-col gap-8">
       {/* Add target */}
       <Panel className="p-6">
-        <div className="eyebrow mb-4">add a target to scope</div>
+        <div className="eyebrow mb-4">add an asset</div>
         <form action={formAction} className="flex flex-col gap-4 max-w-2xl">
           <div className="grid grid-cols-[160px_1fr] gap-3">
             <Field label="Type" required>
@@ -68,7 +68,7 @@ export function ScopeManager({ targets }: { targets: ScopeRow[] }) {
 
           <div>
             <Button type="submit" variant="solid" size="md" disabled={pending}>
-              {pending ? "Adding…" : "Add to scope"}
+              {pending ? "Adding…" : "Add asset"}
             </Button>
           </div>
         </form>
@@ -76,11 +76,11 @@ export function ScopeManager({ targets }: { targets: ScopeRow[] }) {
 
       {/* Targets */}
       <div>
-        <div className="eyebrow mb-4">in-scope assets ({targets.length})</div>
+        <div className="eyebrow mb-4">your assets ({targets.length})</div>
         {targets.length === 0 ? (
           <Panel className="px-6 py-12">
             <p className="text-center text-fg-2 text-[14px]">
-              No targets yet. Add one above, then verify ownership to make it scannable.
+              No assets yet. Add one above, then verify ownership to make it scannable.
             </p>
           </Panel>
         ) : (
@@ -109,7 +109,7 @@ function TargetRow({ t }: { t: ScopeRow }) {
     start(async () => setResult(await verifyScopeTarget(t.id)));
   }
   function onRemove() {
-    if (!confirm(`Remove ${t.value} from scope?`)) return;
+    if (!confirm(`Remove ${t.value}?`)) return;
     start(async () => {
       const r = await removeScopeTarget(t.id);
       if (!r.ok) setResult(r);

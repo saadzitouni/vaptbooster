@@ -54,11 +54,11 @@ export default async function NewScanPage() {
             <div className="eyebrow mb-3">no verified scope</div>
             <p className="text-fg-2 text-[14px]">
               You have no <span className="text-fg">verified</span> targets in
-              scope yet. Add and verify ownership of a target under{" "}
-              <Link href="/scope" className="underline text-fg">
-                Scope
+              verified yet. Add and verify ownership of an asset under{" "}
+              <Link href="/assets" className="underline text-fg">
+                Assets
               </Link>{" "}
-              before requesting a scan — scans only run against verified targets.
+              before requesting a scan — scans only run against verified assets.
             </p>
           </div>
         </Panel>

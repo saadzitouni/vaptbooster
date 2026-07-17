@@ -25,12 +25,12 @@ export default async function ScopePage() {
         eyebrow="tenant"
         title={
           <>
-            Engagement <span className="em">scope</span>
+            Your <span className="em">assets</span>
           </>
         }
         lede={
           <>
-            Declare the domains, IPs, and assets in-scope for your engagements. A target must be{" "}
+            Declare the domains, IPs, and apps you want assessed. An asset must be{" "}
             <span className="em-sm">verified</span> before any scan can run against it — that
             proof of ownership is your authorization to test it.
           </>

@@ -78,7 +78,7 @@ export async function addScopeTarget(_prev: Result | null, formData: FormData): 
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Could not add target." };
   }
-  revalidatePath("/scope");
+  revalidatePath("/assets");
   revalidatePath("/scans/new");
   return { ok: true, message: `Added ${value}. Verify ownership to make it scannable.` };
 }
@@ -119,7 +119,7 @@ export async function verifyScopeTarget(targetId: string): Promise<Result> {
       data: { verifiedAt: new Date(), verifyMethod: "dns-txt" },
     })
   );
-  revalidatePath("/scope");
+  revalidatePath("/assets");
   revalidatePath("/scans/new");
   return { ok: true, message: "Ownership verified — this target is now scannable." };
 }
@@ -140,7 +140,7 @@ export async function removeScopeTarget(targetId: string): Promise<Result> {
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Could not remove target." };
   }
-  revalidatePath("/scope");
+  revalidatePath("/assets");
   revalidatePath("/scans/new");
   return { ok: true, message: "Target removed." };
 }

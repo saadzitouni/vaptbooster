@@ -14,7 +14,7 @@ const TENANT_PREFIXES = [
   "/dashboard",
   "/scans",
   "/findings",
-  "/scope",
+  "/assets",
   "/reports",
   "/settings",
 ];
