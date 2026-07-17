@@ -28,6 +28,13 @@ const AGGRESSIVENESS_OPTIONS = [
   },
 ];
 
+// The LiteLLM model aliases (infra/litellm/config.yaml). Standard = what scans run on.
+const MODEL_OPTIONS = [
+  { value: "vaptbooster-fast", label: "Fast · Haiku 4.5 — $1 / $5 per Mtok" },
+  { value: "vaptbooster-default", label: "Standard · Sonnet 4.6 — $3 / $15 per Mtok" },
+  { value: "vaptbooster-deep", label: "Deep · Opus 4.8 — $5 / $25 per Mtok" },
+];
+
 export function AgentConfigEditor({ config }: { config: MockAgentConfig }) {
   const c = config;
   const router = useRouter();
@@ -229,21 +236,22 @@ export function AgentConfigEditor({ config }: { config: MockAgentConfig }) {
           <div className="p-6 grid md:grid-cols-3 gap-5">
             <div>
               <Label>Fast (cheap loops)</Label>
-              <input value={fastModel} onChange={(e) => setFastModel(e.target.value)} className={inputCls} />
+              <ModelSelect value={fastModel} onChange={setFastModel} />
             </div>
             <div>
-              <Label>Standard (default)</Label>
-              <input value={stdModel} onChange={(e) => setStdModel(e.target.value)} className={inputCls} />
+              <Label>Standard — scans run on this</Label>
+              <ModelSelect value={stdModel} onChange={setStdModel} />
             </div>
             <div>
               <Label>Deep (chained exploits)</Label>
-              <input value={deepModel} onChange={(e) => setDeepModel(e.target.value)} className={inputCls} />
+              <ModelSelect value={deepModel} onChange={setDeepModel} />
             </div>
             <div className="md:col-span-3">
               <Hint>
-                Skills inherit these defaults unless they override{" "}
-                <code className="text-fg-2">modelChoice</code> in their config.
-                Must match a model alias defined in{" "}
+                <span className="text-fg-2">Standard</span> is the model every scan runs on —
+                switch it to trade cost for depth (Haiku ≪ Sonnet ≪ Opus). Applies to the next
+                scan. Fast &amp; Deep are available for per-skill overrides via{" "}
+                <code className="text-fg-2">modelChoice</code>. Aliases are defined in{" "}
                 <code className="text-fg-2">infra/litellm/config.yaml</code>.
               </Hint>
             </div>
@@ -349,4 +357,24 @@ function Label({ children }: { children: React.ReactNode }) {
 }
 function Hint({ children }: { children: React.ReactNode }) {
   return <p className="mt-2 text-2xs text-fg-mute font-mono">{children}</p>;
+}
+
+function ModelSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const known = MODEL_OPTIONS.some((o) => o.value === value);
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
+      {!known && value && <option value={value}>{value} (custom alias)</option>}
+      {MODEL_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
 }

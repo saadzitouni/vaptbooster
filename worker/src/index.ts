@@ -108,6 +108,8 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
   const isRetest = scanKind === "retest";
   // Decrypt authenticated-scan credentials into an "auth brief" for the agent.
   const authBrief = buildAuthBrief(decryptScanCreds(credBlob));
+  // Which LLM the agent runs on — operator-configurable at /operator/agent-config.
+  const scanModel = await getScanModel();
 
   // ---- Autonomous skilled-agent mode ----
   // Opt-in via AGENT_MODE=autonomous, OR forced for a retest (re-verification is
@@ -169,7 +171,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
         scan.ceilingUsdCents,
         Math.round((Number(process.env.AGENT_MAX_BUDGET_USD) || 6) * 100)
       ),
-      model: "vaptbooster-default",
+      model: scanModel,
       resume,
       kind: scanKind,
       retestTargets,
@@ -254,7 +256,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
   await logEvent({
     actor: "system",
     level: "info",
-    msg: `Stage 1 · reconnaissance — planner: ${SIMULATE ? "deterministic (simulate)" : "Claude (vaptbooster-default)"}`,
+    msg: `Stage 1 · reconnaissance — planner: ${SIMULATE ? "deterministic (simulate)" : `Claude (${scanModel})`}`,
   });
 
   const ceiling = scan.ceilingUsdCents;
@@ -273,7 +275,7 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
         tenantId,
         scanId,
         virtualKey,
-        model: "vaptbooster-default",
+        model: scanModel,
         db: prisma,
         costCeilingCents: ceiling,
         onProgress: async (pct, step) => {
@@ -542,6 +544,24 @@ async function reconcileRetest(
     }
   }
   return { fixed, present };
+}
+
+// The LLM the scan agent runs on — the operator sets this at
+// /operator/agent-config (AgentConfig.defaultStandardModel). Raw SQL so it
+// works regardless of the worker's generated-client version; falls back to the
+// default alias if the row/column is absent.
+async function getScanModel(): Promise<string> {
+  try {
+    const rows = await prisma.$queryRawUnsafe<{ defaultStandardModel: string | null }[]>(
+      'SELECT "defaultStandardModel" FROM agent_config WHERE id = $1',
+      "global"
+    );
+    const m = rows[0]?.defaultStandardModel?.trim();
+    if (m) return m;
+  } catch {
+    /* agent_config absent → fall back */
+  }
+  return "vaptbooster-default";
 }
 
 // True once the user/operator has cancelled the scan (cancelScan flips the
