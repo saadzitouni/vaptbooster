@@ -47,6 +47,7 @@ model Tenant {
   usageRecords  UsageRecord[]
   budget        TenantBudget?
   invites       Invite[]
+  reasoningEvents ReasoningEvent[]
 
   @@map("tenants")
 }
@@ -212,6 +213,7 @@ model Scan {
   findings     Finding[]
   reports      Report[]
   usageRecords UsageRecord[]
+  reasoningEvents ReasoningEvent[]
 
   @@index([tenantId])
   @@index([status])
@@ -285,6 +287,41 @@ enum FindingStatus {
   fixed
   wontfix
   duplicate
+}
+
+// -------------------------------------------------------------
+// Reasoning events — the live "reasoning stream" for a scan. One row per
+// event, ordered by `seq` (monotonic per scan). Derived from the agent loop;
+// streamed to the UI over SSE. Payload is a redacted, typed event shape.
+// -------------------------------------------------------------
+enum ReasoningEventType {
+  PHASE
+  OBSERVATION
+  INVARIANT
+  HYPOTHESIS
+  TEST
+  RESULT
+  BLAST_RADIUS
+  HUMAN_HANDOFF
+  VERIFICATION
+  FINDING
+}
+
+model ReasoningEvent {
+  id        String             @id @default(cuid())
+  tenantId  String
+  scanId    String
+  seq       Int                // monotonic per scan — ordering + resume
+  type      ReasoningEventType
+  payload   Json
+  createdAt DateTime           @default(now())
+
+  scan   Scan   @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, seq])
+  @@index([tenantId, scanId])
+  @@map("reasoning_events")
 }
 
 // -------------------------------------------------------------

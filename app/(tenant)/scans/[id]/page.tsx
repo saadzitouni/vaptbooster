@@ -11,6 +11,8 @@ import {
 import { requireTenantId } from "@/lib/session";
 import { getTenantScanDetail } from "@/lib/queries";
 import { LiveRefresh } from "@/components/operator/LiveRefresh";
+import { ReasoningView } from "@/components/reasoning/ReasoningView";
+import { rzMono, rzSerif } from "@/components/reasoning/fonts";
 import { ResumeScanButton } from "@/components/scans/ResumeScanButton";
 import { RetestButton } from "@/components/scans/RetestButton";
 import { CancelScanButton } from "@/components/scans/CancelScanButton";
@@ -25,7 +27,7 @@ export default async function ScanDetailPage({
   const tenantId = await requireTenantId();
   const detail = await getTenantScanDetail(tenantId, id);
   if (!detail) notFound();
-  const { scan, findings, agentLog, resumable } = detail;
+  const { scan, findings, resumable } = detail;
   const totalFindings = Object.values(scan.findingCounts).reduce(
     (a, b) => a + b,
     0
@@ -35,15 +37,6 @@ export default async function ScanDetailPage({
     (scan.status === "failed" ||
       scan.status === "paused_ceiling" ||
       scan.status === "cancelled");
-
-  // Real agent transcript (live). Each line is a step the agent took or a
-  // decision the AI made during the scan.
-  const logLines = agentLog.map((e) => ({
-    ts: new Date(e.ts).toLocaleTimeString("en-GB", { hour12: false }),
-    level: e.level,
-    actor: e.actor,
-    msg: e.msg,
-  }));
 
   const isActive = scan.status === "running" || scan.status === "queued";
   // Non-info findings can be re-tested after the client fixes them.
@@ -136,68 +129,20 @@ export default async function ScanDetailPage({
         </Panel>
       )}
 
-      <div className="grid lg:grid-cols-5 gap-5">
-        {/* Live log */}
-        <Panel className="lg:col-span-3">
-          <PanelHeader
-            eyebrow="stream"
-            title={
-              <>
-                Live <span className="em-sm">log</span>
-              </>
-            }
-          />
-          <div className="p-4 max-h-[420px] overflow-y-auto bg-ink">
-            <pre className="font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">
-              {logLines.length === 0 && (
-                <div className="text-fg-mute">
-                  {scan.status === "queued"
-                    ? "waiting for a worker to pick up the scan…"
-                    : "no agent activity recorded."}
-                </div>
-              )}
-              {logLines.map((l, i) => (
-                <div key={i} className="flex gap-2.5">
-                  <span className="text-fg-mute shrink-0">[{l.ts}]</span>
-                  <span
-                    className={`shrink-0 w-[38px] ${
-                      l.actor === "claude"
-                        ? "text-info"
-                        : l.actor === "tool"
-                        ? "text-fg-mute"
-                        : "text-fg-mute"
-                    }`}
-                  >
-                    {l.actor === "claude" ? "AI→" : l.actor === "tool" ? "exec" : "sys"}
-                  </span>
-                  <span
-                    className={
-                      l.level === "crit"
-                        ? "text-crit"
-                        : l.level === "warn"
-                        ? "text-warn"
-                        : l.level === "ok"
-                        ? "text-ok"
-                        : l.actor === "claude"
-                        ? "text-fg"
-                        : "text-fg-2"
-                    }
-                  >
-                    {l.msg}
-                  </span>
-                </div>
-              ))}
-              {scan.status === "running" && (
-                <div className="text-fg mt-2">
-                  <span className="text-fg-mute animate-pulse">▌ agent working…</span>
-                </div>
-              )}
-            </pre>
-          </div>
-        </Panel>
+      {/* Live reasoning stream (replaces the raw agent log) */}
+      <div className={`${rzMono.variable} ${rzSerif.variable} mb-6`}>
+        <ReasoningView
+          scanId={scan.id}
+          target={scan.targetValue}
+          targetSub="Web application · authorized scope"
+          scanStatus={scan.status}
+          progress={scan.progress}
+        />
+      </div>
 
+      <div>
         {/* Findings list (compact) */}
-        <Panel className="lg:col-span-2">
+        <Panel>
           <PanelHeader
             eyebrow={`${findings.length} findings`}
             title={

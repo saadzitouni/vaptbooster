@@ -23,6 +23,8 @@ import { lookup } from "dns/promises";
 import { readFileSync, existsSync } from "fs";
 import OpenAI from "openai";
 import { PrismaClient, ScanStatus, Severity, FindingStatus } from "@prisma/client";
+import { emitReasoning } from "../reasoning/emit.js";
+import type { ReasoningEvent } from "../reasoning-events.js";
 
 const exec = promisify(execFile);
 
@@ -478,6 +480,10 @@ export async function runAutonomousScan(opts: {
   const findings: { severity: string; title: string }[] = [];
   let spentCents = priorSpentCents;
 
+  // Reasoning stream — derive events from the loop (never blocks the scan).
+  const reason = (e: ReasoningEvent) => emitReasoning(prisma, scanId, tenantId, e);
+  let emittedTesting = false;
+
   // Resolve target IPv4s for the egress allowlist (IPv6 blocked in the sandbox).
   let ips: string[];
   try {
@@ -619,6 +625,9 @@ ${catalog.index}`;
       ];
     }
 
+    // Fresh scan → open the reasoning stream in the recon phase.
+    if (!resumedMessages) await reason({ type: "PHASE", phase: "recon", status: "active" });
+
     for (let turn = startTurn; turn < maxTurns; turn++) {
       if (spentCents >= budgetCents) {
         await log("system", "warn", `budget reached ($${(spentCents / 100).toFixed(2)}) — stopping`);
@@ -664,7 +673,11 @@ ${catalog.index}`;
       const msg = resp.choices[0]?.message;
       if (!msg) break;
       messages.push(msg as OpenAI.Chat.Completions.ChatCompletionMessageParam);
-      if (typeof msg.content === "string" && msg.content.trim()) await log("claude", "info", msg.content.trim().slice(0, 500));
+      if (typeof msg.content === "string" && msg.content.trim()) {
+        const text = msg.content.trim();
+        await log("claude", "info", text.slice(0, 500));
+        await reason({ type: "OBSERVATION", text: text.slice(0, 600) });
+      }
       if (!msg.tool_calls?.length) break;
 
       let finished = false;
@@ -678,10 +691,32 @@ ${catalog.index}`;
           const cmd = String(a.command ?? "");
           const t = Math.min(Number(a.timeout_seconds ?? 60), 180) * 1000;
           await log("claude", "info", `$ ${cmd.slice(0, 300)}`);
+          if (!emittedTesting) {
+            emittedTesting = true;
+            await reason({ type: "PHASE", phase: "recon", status: "done" });
+            await reason({ type: "PHASE", phase: "testing", status: "active" });
+          }
           const r = await docker(["exec", cid, "sh", "-c", cmd], t + 5000);
           const combined = (r.out + (r.err ? `\n[stderr] ${r.err}` : "")).slice(0, 2500);
           await log("tool", r.code === 0 ? "ok" : "warn", `exit ${r.code} · ${combined.split("\n")[0]?.slice(0, 160) ?? ""}`);
           result = `exit_code=${r.code}\n${combined || "(no output)"}`;
+          // Derive a TEST block from the command + its result.
+          const verb = (cmd.trim().split(/\s+/)[0] || "run").toUpperCase().slice(0, 10);
+          const rest = cmd.trim().slice(verb.length).trim() || cmd.trim();
+          await reason({
+            type: "TEST",
+            steps: [
+              {
+                method: verb,
+                path: rest.slice(0, 200),
+                response: {
+                  status: r.code,
+                  summary: (combined.split("\n").find((l) => l.trim()) ?? "").slice(0, 200),
+                  expected: r.code === 0,
+                },
+              },
+            ],
+          });
         } else if (tc.function.name === "load_skill") {
           const keys = Array.isArray(a.keys) ? (a.keys as unknown[]).map(String) : [];
           result = await loadSkillBodies(prisma, keys);
@@ -689,8 +724,9 @@ ${catalog.index}`;
         } else if (tc.function.name === "report_finding") {
           const sev = normSeverity(a.severity);
           const title = String(a.title ?? "Finding");
+          const location = String(a.location ?? opts.fallbackLocation);
           try {
-            await prisma.finding.create({
+            const created = await prisma.finding.create({
               data: {
                 tenantId,
                 scanId,
@@ -699,12 +735,14 @@ ${catalog.index}`;
                 severity: sev,
                 status: FindingStatus.open,
                 cwe: (a.cwe as string) ?? null,
-                location: String(a.location ?? opts.fallbackLocation),
+                location,
                 remediation: (a.remediation as string) ?? null,
               },
             });
             findings.push({ severity: sev, title });
             await log("system", sev === "critical" || sev === "high" ? "crit" : sev === "medium" ? "warn" : "info", `[${sev.toUpperCase()}] ${title}`);
+            await reason({ type: "RESULT", severity: sev, title, detail: String(a.summary ?? "").slice(0, 400), invariantViolated: false });
+            await reason({ type: "FINDING", findingId: created.id, severity: sev, title, subtitle: location.slice(0, 140), verified: false });
             result = "recorded";
           } catch (e) {
             // Surface the failure instead of silently dropping a confirmed finding.
@@ -715,6 +753,8 @@ ${catalog.index}`;
           await log("claude", "ok", `✓ engagement complete — ${a.summary ?? ""}`);
           finished = true;
           agentFinished = true;
+          if (emittedTesting) await reason({ type: "PHASE", phase: "testing", status: "done" });
+          await reason({ type: "PHASE", phase: "report", status: "done" });
           result = "ok";
         } else {
           result = "unknown_tool";
