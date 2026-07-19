@@ -16,8 +16,10 @@
   --med: #8b7a2e;
   --ok: #5a6b4a;
   --info: #5a6070;
-  --mono: var(--font-rz-mono), ui-monospace, "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
-  --serif: var(--font-rz-serif), Georgia, "Times New Roman", serif;
+  /* Reuse the app's globally-loaded fonts (set on <html> in lib/fonts.ts):
+     JetBrains Mono + Fraunces italic — with system fallbacks. */
+  --mono: var(--font-mono, ui-monospace), "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --serif: var(--font-serif, Georgia), "Times New Roman", serif;
 
   font-family: var(--mono);
   color: var(--bone);

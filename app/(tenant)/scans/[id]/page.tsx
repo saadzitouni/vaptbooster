@@ -12,7 +12,6 @@ import { requireTenantId } from "@/lib/session";
 import { getTenantScanDetail } from "@/lib/queries";
 import { LiveRefresh } from "@/components/operator/LiveRefresh";
 import { ReasoningView } from "@/components/reasoning/ReasoningView";
-import { rzMono, rzSerif } from "@/components/reasoning/fonts";
 import { ResumeScanButton } from "@/components/scans/ResumeScanButton";
 import { RetestButton } from "@/components/scans/RetestButton";
 import { CancelScanButton } from "@/components/scans/CancelScanButton";
@@ -130,7 +129,7 @@ export default async function ScanDetailPage({
       )}
 
       {/* Live reasoning stream (replaces the raw agent log) */}
-      <div className={`${rzMono.variable} ${rzSerif.variable} mb-6`}>
+      <div className="mb-6">
         <ReasoningView
           scanId={scan.id}
           target={scan.targetValue}
