@@ -129,6 +129,31 @@ export async function operatorSetScanLimit(
   return { ok: true, message: `Scan limit set to ${n}/period.` };
 }
 
+// Set the per-SCAN cost cap for a tenant (USD). 0 → reset to the plan default.
+export async function operatorSetScanBudget(
+  tenantId: string,
+  usd: number
+): Promise<Result> {
+  await requireOperator();
+  const dollars = Math.max(0, Math.min(1000, Number(usd) || 0)); // sanity cap $1000
+  const cents = dollars > 0 ? Math.round(dollars * 100) : null;
+  try {
+    await withOperator((db) =>
+      db.tenantBudget.update({ where: { tenantId }, data: { scanCeilingUsdCents: cents } })
+    );
+  } catch {
+    return { ok: false, message: "No budget on this tenant yet — set a plan first." };
+  }
+  revalTenant(tenantId);
+  return {
+    ok: true,
+    message:
+      cents === null
+        ? "Per-scan budget reset to the plan default."
+        : `Per-scan budget set to $${dollars.toFixed(2)}.`,
+  };
+}
+
 // Reset the SCAN quota (fresh allotment, new 30-day scan window starting now).
 // Deliberately does NOT touch currentPeriodStart, so cost/spend tracking is
 // preserved.

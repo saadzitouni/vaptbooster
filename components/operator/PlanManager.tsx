@@ -7,6 +7,7 @@ import { PLAN_KEYS, PLANS } from "@/lib/plans";
 import {
   operatorSetTenantPlan,
   operatorSetScanLimit,
+  operatorSetScanBudget,
   operatorResetTenantPeriod,
 } from "@/lib/actions/tenants";
 
@@ -16,17 +17,20 @@ export function PlanManager({
   used,
   included,
   resetsAt,
+  scanBudgetCents,
 }: {
   tenantId: string;
   plan: string;
   used: number;
   included: number;
   resetsAt: string;
+  scanBudgetCents: number;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [limit, setLimit] = useState(included);
+  const [budget, setBudget] = useState(scanBudgetCents / 100);
 
   function run(fn: () => Promise<{ ok: boolean; message: string }>) {
     setMsg(null);
@@ -92,6 +96,29 @@ export function PlanManager({
           <Button variant="ghost" size="sm" disabled={pending} onClick={() => run(() => operatorResetTenantPeriod(tenantId))}>
             Reset period
           </Button>
+        </div>
+
+        <div className="flex items-end gap-2 flex-wrap pt-1">
+          <div>
+            <label className="block text-2xs font-mono text-fg-mute mb-1.5">
+              per-scan budget (USD)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step="0.5"
+              value={budget}
+              onChange={(e) => setBudget(Number(e.target.value))}
+              className="w-28 bg-ink-3 border border-line-2 rounded px-3 py-2 text-[13px] text-fg focus:border-fg outline-none"
+            />
+          </div>
+          <Button variant="line" size="sm" disabled={pending} onClick={() => run(() => operatorSetScanBudget(tenantId, budget))}>
+            Set budget
+          </Button>
+          <p className="w-full text-2xs text-fg-mute mt-0.5">
+            Max spend per scan for this tenant. <span className="text-fg-2">0</span> = the{" "}
+            {plan} plan default. Applies to the next scan.
+          </p>
         </div>
 
         {msg && (

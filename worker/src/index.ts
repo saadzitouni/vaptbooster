@@ -164,13 +164,13 @@ async function processScan(job: Job<{ scanId: string; tenantId: string; active?:
       targetUrl: scan.target.value,
       fallbackLocation: scan.targetValue,
       virtualKey,
-      // Cap the autonomous run so cost can't silently climb (input tokens
-      // dominate). Default $6; raise via AGENT_MAX_BUDGET_USD. Still bounded by
-      // the scan's own ceiling.
-      budgetCents: Math.min(
-        scan.ceilingUsdCents,
-        Math.round((Number(process.env.AGENT_MAX_BUDGET_USD) || 6) * 100)
-      ),
+      // Per-scan budget = the scan's own ceiling, set per-tenant at request
+      // time (plan default or operator override). AGENT_MAX_BUDGET_USD, if set,
+      // is an OPTIONAL absolute safety cap layered on top (ops kill-switch).
+      budgetCents:
+        Number(process.env.AGENT_MAX_BUDGET_USD) > 0
+          ? Math.min(scan.ceilingUsdCents, Math.round(Number(process.env.AGENT_MAX_BUDGET_USD) * 100))
+          : scan.ceilingUsdCents,
       model: scanModel,
       resume,
       kind: scanKind,

@@ -387,6 +387,10 @@ model TenantBudget {
   monthlyCreditsIncluded Int @default(10)
   monthlyHardCeilingUsdCents Int @default(50000) // €500 default — emergency stop
 
+  // Per-SCAN cost cap for this tenant (USD cents). Null → use the plan default
+  // (lib/plans.ts planScanBudget). Applied to scan.ceilingUsdCents at request.
+  scanCeilingUsdCents Int?
+
   // Billing / cost window (resets monthly). Cost + spend queries scope to this.
   currentPeriodStart DateTime
   // Scan-quota window — separate from billing so an operator can reset a

@@ -9,7 +9,7 @@
 // =============================================================
 import { ScanStatus } from "@prisma/client";
 import type { TxClient } from "@/lib/db";
-import { PERIOD_DAYS, planLabel, planRetests } from "@/lib/plans";
+import { PERIOD_DAYS, planLabel, planRetests, planScanBudget } from "@/lib/plans";
 
 const PERIOD_MS = PERIOD_DAYS * 24 * 60 * 60 * 1000;
 
@@ -25,6 +25,8 @@ export type PlanUsage = {
   retestsIncluded: number;
   retestsRemaining: number;
   retestAtLimit: boolean;
+  // Per-scan cost cap for this tenant (USD cents): override ?? plan default.
+  scanBudgetCents: number;
   periodStart: string;
   resetsAt: string;
 };
@@ -96,6 +98,7 @@ export async function getPlanUsage(
     retestsIncluded,
     retestsRemaining: Math.max(0, retestsIncluded - retestsUsed),
     retestAtLimit: retestsUsed >= retestsIncluded,
+    scanBudgetCents: budget?.scanCeilingUsdCents ?? planScanBudget(plan),
     periodStart: new Date(periodStart).toISOString(),
     resetsAt: new Date(periodStart + PERIOD_MS).toISOString(),
   };

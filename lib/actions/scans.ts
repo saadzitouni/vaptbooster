@@ -8,6 +8,7 @@ import { withTenant, withOperator, type TxClient } from "@/lib/db";
 import { requireTenantUser, requireOperator } from "@/lib/session";
 import { enqueueScan, removeScanJob } from "@/lib/queue";
 import { getPlanUsage } from "@/lib/usage";
+import { planScanBudget } from "@/lib/plans";
 import { encryptScanCreds, hasAnyCred, type ScanCreds } from "@/lib/scan-credentials";
 
 const requestScanSchema = z.object({
@@ -98,6 +99,8 @@ export async function requestScan(formData: FormData) {
         approvedAt: autoApprove ? new Date() : null,
         notes: notes || null,
         credentials,
+        // Per-tenant per-scan cost cap (plan default or operator override).
+        ceilingUsdCents: usage.scanBudgetCents,
       },
     });
     newScanId = scan.id;
@@ -355,6 +358,14 @@ export async function retestFindings(
         throw new Error("Target is not verified — verify it under Scope before retesting.");
       }
 
+      // Resolve this tenant's per-scan budget (override ?? plan default).
+      const budRow = await db.tenantBudget.findUnique({
+        where: { tenantId: findingTenant },
+        select: { plan: true, scanCeilingUsdCents: true },
+      });
+      const scanBudgetCents =
+        budRow?.scanCeilingUsdCents ?? planScanBudget((budRow?.plan as string) ?? "solo");
+
       // Retest quota (tenant self-service only — operators bypass, like scans).
       // A retest doesn't consume a scan, but each is a full paid run, so cap it
       // per period to prevent a fix→retest loop being used for unlimited scans.
@@ -382,6 +393,7 @@ export async function retestFindings(
           status: "queued",
           kind: "retest",
           retestFindingIds: findings.map((f) => f.id),
+          ceilingUsdCents: scanBudgetCents,
           // Re-verify with the same auth as the original scan (if any).
           credentials: first.scan?.credentials ?? null,
           requesterId: userId,

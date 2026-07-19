@@ -164,10 +164,11 @@ services:
       # this host, and the Docker socket mounted below.
       AGENT_MODE: ${AGENT_MODE:-deterministic}
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-vaptbooster-agent-sandbox:latest}
-      # Per-scan spend cap for an autonomous run (USD). Raise it to let scans run
-      # longer before "budget reached — stopping". Still bounded by the scan's own
-      # ceiling. Default 6.
-      AGENT_MAX_BUDGET_USD: ${AGENT_MAX_BUDGET_USD:-6}
+      # OPTIONAL absolute per-scan safety cap (USD) across ALL tenants. Leave
+      # unset — the per-tenant scan budget (plan default / operator override,
+      # set on the tenant page) is authoritative. Set this only as an ops
+      # kill-switch to hard-cap every scan regardless of tenant.
+      AGENT_MAX_BUDGET_USD: ${AGENT_MAX_BUDGET_USD:-}
       # How many scans run in parallel. Each autonomous scan launches a heavy Kali
       # sandbox (~0.5–1.5 GB), so this is bounded by THIS host's RAM. Default 2 to
       # stay safe on a small VPS; raise on a bigger box (max 16).

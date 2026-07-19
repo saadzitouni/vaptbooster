@@ -88,6 +88,7 @@ export default async function OperatorTenantDetailPage({
           used={usage.used}
           included={usage.included}
           resetsAt={usage.resetsAt}
+          scanBudgetCents={usage.scanBudgetCents}
         />
       </div>
 
