@@ -11,12 +11,17 @@
 # reads ~0.1× input. Keep this file in sync with provider pricing.
 # =============================================================
 
+# OpenRouter keys added from the operator UI (Operator → LLM keys) are
+# registered at runtime via /model/new (store_model_in_db) as extra
+# deployments of these same aliases with order: 1, so they are tried first;
+# the env key below is the order-2 fallback. See lib/openrouter-keys.ts.
 model_list:
   # ---- Default workhorse: balanced speed/quality (Sonnet 4.6) ----
   - model_name: vaptbooster-default
     litellm_params:
       model: openrouter/anthropic/claude-sonnet-4.6
       api_key: os.environ/OPENROUTER_API_KEY
+      order: 2 # env fallback — keys added in Operator → LLM keys are order 1
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
       cache_creation_input_token_cost: 0.00000375
@@ -27,6 +32,7 @@ model_list:
     litellm_params:
       model: openrouter/anthropic/claude-haiku-4.5
       api_key: os.environ/OPENROUTER_API_KEY
+      order: 2 # env fallback — keys added in Operator → LLM keys are order 1
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000005
       cache_creation_input_token_cost: 0.00000125
@@ -37,6 +43,7 @@ model_list:
     litellm_params:
       model: openrouter/anthropic/claude-opus-4.8
       api_key: os.environ/OPENROUTER_API_KEY
+      order: 2 # env fallback — keys added in Operator → LLM keys are order 1
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
       cache_creation_input_token_cost: 0.00000625

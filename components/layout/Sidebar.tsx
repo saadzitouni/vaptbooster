@@ -25,6 +25,7 @@ const OPERATOR_NAV: NavItem[] = [
   { href: "/operator/reports",      label: "Reports",      icon: <IconReport /> },
   { href: "/operator/skills",       label: "Skills",       icon: <IconBrain /> },
   { href: "/operator/agent-config", label: "Agent config", icon: <IconCog /> },
+  { href: "/operator/llm-keys",     label: "LLM keys",     icon: <IconKey /> },
   { href: "/operator/invites",      label: "Invites",      icon: <IconMail /> },
 ];
 
@@ -84,6 +85,14 @@ export function Sidebar({
 }
 
 // -------- Icons (inline SVG, thin strokes, brutecat-flavored) --------
+function IconKey() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="15.5" r="4.5" />
+      <path d="M10.7 12.3L21 2M16 7l3 3M18 5l2 2" />
+    </svg>
+  );
+}
 function IconHome() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
