@@ -7,12 +7,15 @@ import { Input, Field } from "@/components/ui/Input";
 import { addOpenRouterKey, deleteOpenRouterKey } from "@/lib/actions/openrouter-keys";
 import type { OpenRouterKeyRow } from "@/lib/openrouter-keys";
 
-export function OpenRouterKeysManager({ keys, aliasCount }: { keys: OpenRouterKeyRow[]; aliasCount: number }) {
+export function OpenRouterKeysManager({ keys: allKeys, aliasCount }: { keys: OpenRouterKeyRow[]; aliasCount: number }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  // Hide deleted keys right away even if the gateway read behind the refresh is stale.
+  const [deleted, setDeleted] = useState<string[]>([]);
+  const keys = allKeys.filter((k) => !deleted.includes(k.id));
 
   function run(fn: () => Promise<{ ok: boolean; message: string }>, onOk?: () => void) {
     setMsg(null);
@@ -29,7 +32,7 @@ export function OpenRouterKeysManager({ keys, aliasCount }: { keys: OpenRouterKe
   function onDelete(k: OpenRouterKeyRow) {
     const last = keys.length === 1 ? "\n\nThis is the last UI key — scans will fall back to the OPENROUTER_API_KEY env key." : "";
     if (!confirm(`Delete "${k.label}" (…${k.last4})?${last}`)) return;
-    run(() => deleteOpenRouterKey(k.id));
+    run(() => deleteOpenRouterKey(k.id), () => setDeleted((d) => [...d, k.id]));
   }
 
   return (

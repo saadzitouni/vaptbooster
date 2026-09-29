@@ -81,6 +81,21 @@ export async function litellm(path: string, init?: { method?: string; body?: unk
   return res.json();
 }
 
+// With --num_workers > 1, each LiteLLM worker only picks up /model/new and
+// /model/delete on its periodic DB sync (~10-15s measured), so /model/info
+// reads flap and a deleted key can still be routed to briefly. Both compose
+// files run 1 worker; this wait is a cheap guard before the page re-renders.
+export async function waitForGateway(keyId: string, expected: number, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let streak = 0;
+  while (Date.now() < deadline && streak < 4) {
+    const rows = await listOpenRouterKeys().catch(() => null);
+    const n = rows?.find((k) => k.id === keyId)?.deploymentIds.length ?? 0;
+    streak = rows && n === expected ? streak + 1 : 0;
+    if (streak < 4) await new Promise((r) => setTimeout(r, 300));
+  }
+}
+
 /** All UI-managed OpenRouter keys currently registered in the gateway. */
 export async function listOpenRouterKeys(): Promise<OpenRouterKeyRow[]> {
   const data = (await litellm("/model/info")) as { data?: ModelInfoEntry[] };

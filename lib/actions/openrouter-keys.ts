@@ -3,7 +3,7 @@
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { requireOperator } from "@/lib/session";
-import { OPENROUTER_DEPLOYMENTS, litellm, listOpenRouterKeys, type KeyTag } from "@/lib/openrouter-keys";
+import { OPENROUTER_DEPLOYMENTS, litellm, listOpenRouterKeys, waitForGateway, type KeyTag } from "@/lib/openrouter-keys";
 
 type Result = { ok: boolean; message: string };
 
@@ -60,6 +60,7 @@ export async function addOpenRouterKey(label: string, apiKey: string): Promise<R
     return { ok: false, message: errMsg(e) };
   }
 
+  await waitForGateway(keyId, OPENROUTER_DEPLOYMENTS.length);
   revalidatePath("/operator/llm-keys");
   return { ok: true, message: `Added "${name}" (…${tag.vb_last4}). New LLM calls use it right away.` };
 }
@@ -79,6 +80,7 @@ export async function deleteOpenRouterKey(keyId: string): Promise<Result> {
     row.deploymentIds.map((id) => litellm("/model/delete", { method: "POST", body: { id } }))
   );
   const failed = results.filter((r) => r.status === "rejected").length;
+  if (!failed) await waitForGateway(keyId, 0);
   revalidatePath("/operator/llm-keys");
   if (failed) return { ok: false, message: `${failed} of ${results.length} deployments failed to delete — try again.` };
   return {
