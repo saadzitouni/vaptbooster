@@ -22,11 +22,14 @@ export default async function ScansPage() {
         }
         lede="Every scan ever queued, running, or completed against your scope."
         actions={
-          <Link href="/scans/new">
-            <Button variant="solid">
-              Request scan
-            </Button>
-          </Link>
+          <>
+            <Link href="/scans/schedules">
+              <Button variant="line">Schedules</Button>
+            </Link>
+            <Link href="/scans/new">
+              <Button variant="solid">Request scan</Button>
+            </Link>
+          </>
         }
       />
 

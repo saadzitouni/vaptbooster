@@ -19,7 +19,7 @@
 // in-worker check protects this individual scan from runaway loops.
 // =============================================================
 
-import { Worker, Job, type ConnectionOptions } from "bullmq";
+import { Worker, Queue, Job, type ConnectionOptions } from "bullmq";
 import IORedis from "ioredis";
 import { existsSync, readFileSync } from "fs";
 import { randomUUID } from "crypto";
@@ -32,6 +32,7 @@ import { runFormChecks } from "./active/forms.js";
 import { runApiTests } from "./active/api.js";
 import { runAutonomousScan } from "./autonomous/runner.js";
 import { decryptScanCreds, buildAuthBrief } from "./credentials.js";
+import { runDueSchedules } from "./schedule.js";
 import { logger } from "./logger.js";
 
 const prisma = new PrismaClient();
@@ -730,10 +731,66 @@ worker.on("failed", (job, err) =>
   logger.error({ jobId: job?.id, err: err.message }, "job_failed")
 );
 
+// =============================================================
+// Scheduled scans — DB-backed cron tick
+// =============================================================
+// Every minute, fire any schedule whose nextRunAt has passed (see
+// worker/src/schedule.ts). A transaction-scoped Postgres advisory lock ensures
+// only ONE worker runs the tick, even with several worker containers sharing
+// the queue. SCAN_SCHEDULER=false disables it on a given worker.
+const SCHEDULER_ON = process.env.SCAN_SCHEDULER !== "false";
+const SCHEDULER_LOCK_KEY = 492_317; // arbitrary, unique to this tick
+const scanProducer = new Queue(QUEUE_NAME, {
+  connection: connection as unknown as ConnectionOptions,
+});
+
+// Mirror of lib/queue.enqueueScan for scheduler-created scans.
+async function enqueueScheduledScan(scanId: string, tenantId: string) {
+  const active = process.env.SCAN_ACTIVE !== "false";
+  await scanProducer.add(
+    "scan",
+    { scanId, tenantId, active, resume: false },
+    { jobId: scanId, removeOnComplete: 200, removeOnFail: 200 }
+  );
+}
+
+let schedulerBusy = false;
+async function schedulerTick() {
+  if (schedulerBusy) return; // never overlap ticks
+  schedulerBusy = true;
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const rows = await tx.$queryRawUnsafe<{ locked: boolean }[]>(
+          "SELECT pg_try_advisory_xact_lock($1) AS locked",
+          SCHEDULER_LOCK_KEY
+        );
+        if (!rows[0]?.locked) return; // another worker holds the tick
+        await runDueSchedules(tx, enqueueScheduledScan, logger);
+      },
+      { timeout: 120_000, maxWait: 5_000 }
+    );
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "scheduler_tick_failed");
+  } finally {
+    schedulerBusy = false;
+  }
+}
+
+let schedulerTimer: NodeJS.Timeout | undefined;
+if (SCHEDULER_ON) {
+  schedulerTimer = setInterval(schedulerTick, 60_000);
+  // Kick once shortly after boot so a restart doesn't delay due scans a minute.
+  setTimeout(schedulerTick, 5_000);
+  logger.info("scan_scheduler_enabled");
+}
+
 // Graceful shutdown
 const shutdown = async () => {
   logger.info("shutting_down");
+  if (schedulerTimer) clearInterval(schedulerTimer);
   await worker.close();
+  await scanProducer.close();
   await prisma.$disconnect();
   process.exit(0);
 };

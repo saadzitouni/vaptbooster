@@ -54,10 +54,11 @@ export async function requestScan(formData: FormData) {
   };
   const credentials = hasAnyCred(creds) ? encryptScanCreds(creds) : null;
 
-  // AUTO_APPROVE_SCANS=true → skip the operator approval step: the scan is
-  // queued immediately when the tenant requests it. Scope must still be verified
-  // (that's the authorization gate). Leave unset to keep operator approval.
-  const autoApprove = process.env.AUTO_APPROVE_SCANS === "true";
+  // Scans start the moment a tenant requests them — no operator approval gate
+  // (it was a bottleneck across many clients). Scope verification remains the
+  // authorization gate. Set REQUIRE_SCAN_APPROVAL=true to restore the manual
+  // operator approval step platform-wide.
+  const autoApprove = process.env.REQUIRE_SCAN_APPROVAL !== "true";
   let newScanId = "";
 
   await withTenant(tenantId, async (db) => {

@@ -48,6 +48,7 @@ model Tenant {
   budget        TenantBudget?
   invites       Invite[]
   reasoningEvents ReasoningEvent[]
+  scanSchedules ScanSchedule[]
 
   @@map("tenants")
 }
@@ -148,6 +149,7 @@ model ScopeTarget {
 
   addedAt   DateTime @default(now())
   scans     Scan[]
+  scanSchedules ScanSchedule[]
 
   @@index([tenantId])
   @@map("scope_targets")
@@ -219,6 +221,47 @@ model Scan {
   @@index([status])
   @@index([requestedAt])
   @@map("scans")
+}
+
+// -------------------------------------------------------------
+// Scan schedules — tenant-defined recurring scans (daily/weekly/monthly
+// at a chosen local time). A DB-backed cron tick in the worker fires the
+// due ones. See lib/schedule.ts (shared) + worker/src/schedule.ts.
+// -------------------------------------------------------------
+model ScanSchedule {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  targetId    String
+  target      ScopeTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  targetValue String      // denormalized for history / logging
+
+  frequency  String  // "daily" | "weekly" | "monthly"
+  hour       Int     // 0-23, local to `timezone`
+  minute     Int     // 0-59
+  dayOfWeek  Int?    // 0=Sun..6=Sat — weekly only
+  dayOfMonth Int?    // 1-28 — monthly only (capped at 28 so every month has it)
+  timezone   String  @default("UTC") // IANA tz, e.g. "Africa/Algiers"
+
+  active     Boolean @default(true)
+  notes      String? @db.Text
+
+  // Encrypted (AES-256-GCM) test credentials carried onto each scan this
+  // schedule creates — same format as Scan.credentials. Never plaintext.
+  credentials String? @db.Text
+
+  nextRunAt  DateTime  // next fire time (UTC)
+  lastRunAt  DateTime?
+  lastScanId String?
+
+  createdById String?  // audit only (no FK, survives user deletion)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([active, nextRunAt])
+  @@map("scan_schedules")
 }
 
 enum ScanStatus {
