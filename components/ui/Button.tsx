@@ -12,7 +12,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const VARIANTS: Record<Variant, string> = {
   solid:
-    "bg-fg text-ink border border-fg hover:bg-white hover:border-white disabled:bg-line-2 disabled:text-fg-mute disabled:border-line-2",
+    "bg-fg text-ink border border-fg hover:bg-fg-2 hover:border-fg-2 disabled:bg-line-2 disabled:text-fg-mute disabled:border-line-2",
   ghost:
     "bg-transparent text-fg-2 border border-transparent hover:text-fg hover:bg-ink-2",
   line:

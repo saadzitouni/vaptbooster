@@ -1,4 +1,4 @@
-import { JetBrains_Mono, Fraunces } from "next/font/google";
+import { JetBrains_Mono, Lora } from "next/font/google";
 
 export const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -7,7 +7,8 @@ export const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-export const fraunces = Fraunces({
+// Accent face — single-word italic emphasis inside headlines only.
+export const lora = Lora({
   subsets: ["latin"],
   weight: ["400", "500"],
   style: ["italic"],

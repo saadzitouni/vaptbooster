@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 import type { Severity, ScanStatus, FindingStatus } from "@/lib/mock-data";
 
-type Tone = "default" | "ok" | "warn" | "crit" | "info" | "mute";
+type Tone = "default" | "ok" | "med" | "high" | "warn" | "crit" | "info" | "mute";
 
 export function Badge({
   tone = "default",
@@ -16,6 +16,8 @@ export function Badge({
   const tones: Record<Tone, string> = {
     default: "border-line-2 text-fg",
     ok: "border-ok/40 text-ok",
+    med: "border-med/40 text-med",
+    high: "border-high/40 text-high",
     warn: "border-warn/40 text-warn",
     crit: "border-crit/40 text-crit",
     info: "border-info/40 text-info",
@@ -38,10 +40,10 @@ export function Badge({
 
 const SEVERITY_TONES: Record<Severity, Tone> = {
   critical: "crit",
-  high: "warn",
-  medium: "info",
-  low: "mute",
-  info: "mute",
+  high: "high",
+  medium: "med",
+  low: "ok",
+  info: "info",
 };
 
 export function SeverityBadge({ severity }: { severity: Severity }) {

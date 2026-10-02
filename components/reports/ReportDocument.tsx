@@ -7,7 +7,7 @@ import {
   type ReportDoc,
 } from "@/lib/report";
 
-// Split a title so its final word can carry the Fraunces-italic emphasis
+// Split a title so its final word can carry the Lora-italic emphasis
 // (brand rule: emphasis words only, ≤2 per page).
 function splitEmphasis(title: string): { head: string; tail: string } {
   const t = title.trim();

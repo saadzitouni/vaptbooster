@@ -266,7 +266,7 @@ export function ReportEditor({
                   placeholder="Security Assessment Report"
                 />
                 <p className="mt-1 text-2xs text-fg-mute">
-                  The last word renders in Fraunces italic on the cover.
+                  The last word renders in Lora italic on the cover.
                 </p>
               </div>
               <div>
@@ -366,7 +366,7 @@ export function ReportEditor({
                 >
                   <div
                     className="text-[18px] font-medium leading-none"
-                    style={{ color: counts[sev] ? SIGNAL[sev] : "#6a6a6a" }}
+                    style={{ color: counts[sev] ? SIGNAL[sev] : "#8A8A85" }}
                   >
                     {counts[sev]}
                   </div>

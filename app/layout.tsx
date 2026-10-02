@@ -1,6 +1,6 @@
 import "@/styles/globals.css";
 import type { Metadata } from "next";
-import { jetbrainsMono, fraunces } from "@/lib/fonts";
+import { jetbrainsMono, lora } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: "VAPTBOOSTER",
@@ -13,7 +13,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${jetbrainsMono.variable} ${fraunces.variable}`}>
+    <html lang="en" className={`${jetbrainsMono.variable} ${lora.variable}`}>
       <body className="font-mono bg-ink text-fg antialiased">{children}</body>
     </html>
   );

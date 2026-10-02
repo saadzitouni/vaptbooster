@@ -3,21 +3,22 @@
    meaning only. */
 
 .root {
-  --ink: #0a0a0a;
-  --ink2: #101010;
-  --ink3: #161616;
-  --line: #242424;
-  --line2: #2e2e2e;
-  --bone: #ededed;
-  --fg2: #a8a8a8;
-  --mute: #6a6a6a;
+  /* PWNTROL brand v1 — light paper theme (names kept from the dark mock). */
+  --ink: #fafaf7;
+  --ink2: #f2f1ec;
+  --ink3: #eae8df;
+  --line: #dcdbd3;
+  --line2: #bfbeb4;
+  --bone: #0a0a0a;
+  --fg2: #4a4a4a;
+  --mute: #8a8a85;
   --crit: #b4231c;
   --high: #c46a17;
   --med: #8b7a2e;
   --ok: #5a6b4a;
   --info: #5a6070;
   /* Reuse the app's globally-loaded fonts (set on <html> in lib/fonts.ts):
-     JetBrains Mono + Fraunces italic — with system fallbacks. */
+     JetBrains Mono + Lora italic — with system fallbacks. */
   --mono: var(--font-mono, ui-monospace), "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
   --serif: var(--font-serif, Georgia), "Times New Roman", serif;
 
@@ -289,7 +290,7 @@
 .code {
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: #0c0c0c;
+  background: var(--ink3);
   padding: 13px 17px;
   font-size: 13.5px;
   line-height: 1.6;

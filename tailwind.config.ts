@@ -5,30 +5,33 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Brutecat palette — near-black with hairline grays
+        // PWNTROL brand v1 — light "paper" theme (pwntrol-brand-colors.pdf).
+        // "ink" keeps its name but is now the paper surface scale.
         ink: {
-          DEFAULT: "#0a0a0a", // page bg
-          2: "#101010",       // raised surface
-          3: "#161616",       // input bg / focused surface
+          DEFAULT: "#FAFAF7", // --ink / --paper: page background
+          2: "#F2F1EC",       // raised surfaces — cards, callouts, code panels
+          3: "#EAE8DF",       // deepest fill — active/selected, nested chips
         },
         line: {
-          DEFAULT: "#1f1f1f", // hairline borders
-          2: "#2a2a2a",       // slightly stronger borders / input frames
+          DEFAULT: "#DCDBD3", // hairline — dividers, table rules, card borders
+          2: "#BFBEB4",       // stronger border — inputs, buttons
         },
         fg: {
-          DEFAULT: "#ededed", // primary text
-          2: "#a8a8a8",       // secondary text
-          mute: "#6a6a6a",    // muted / placeholder / labels
+          DEFAULT: "#0A0A0A", // primary text, headings, icons
+          2: "#4A4A4A",       // body copy, descriptions
+          mute: "#8A8A85",    // labels, eyebrows, timestamps, placeholders
         },
-        // Status colors — used sparingly
-        ok:   "#22c55e",
-        warn: "#f59e0b",
-        crit: "#ff5c5c",
-        info: "#60a5fa",
+        // Status accents — severity and state only, never large fills
+        ok:   "#5A6B4A", // resolved / passing / low risk
+        med:  "#8B7A2E", // medium severity
+        high: "#C46A17", // high severity
+        warn: "#C46A17", // legacy alias of high (pending / open states)
+        crit: "#B4231C", // critical, blocking
+        info: "#5A6070", // neutral / informational
       },
       fontFamily: {
         mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
-        serif: ['"Fraunces"', "Georgia", "serif"],
+        serif: ['"Lora"', "Georgia", "serif"],
       },
       fontSize: {
         "2xs": "11px",
